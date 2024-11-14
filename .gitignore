@@ -164,3 +164,4 @@ exe_test/
 _upload/
 wastepro.toml
 mosquitto.bat
+config_test.py
