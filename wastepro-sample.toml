@@ -1,9 +1,20 @@
+[system]
+version = 1
+
 [broker]
-placeholder = ""
+broker_type = "mqtt"
+# broker_type = "amqp"
 
 [broker.mqtt]
 host = "localhost"
-port = 1883
-username = "aaa"
-password = "bbb"
+port = 1884
+username = "eric"
+password = "eric123"
 keepalive = 60
+
+[broker.amqp]
+host = "amqp_host"
+port = 5672
+username = "amqp_user"
+password = "amqp_pass"
+heartbeat = 30
