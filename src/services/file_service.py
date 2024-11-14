@@ -8,12 +8,12 @@ from agentflow.core.agent import Agent
 from agentflow.core.parcel import Parcel
 
 from logging import Logger
-logger:Logger = __import__('wastepro').get_logger()
+logger:Logger = __import__('src').get_logger()
 
 
 class FileService(Agent):
     def __init__(self, cfg):
-        super().__init__(cfg)
+        super().__init__('file_service.services.wastepro', cfg)
         self.storage_root = cfg.get("storage_root")
 
 
@@ -32,7 +32,7 @@ class FileService(Agent):
 
     def handle_file_upload(self, topic:str, data):
         parcel = Parcel.from_bytes(data)
-        logger.debug(f"topic: {topic}, filename: {mdata.get('filename')}")
+        logger.debug(f"topic: {topic}, filename: {parcel.get('filename')}, content size: {len(parcel.content)}")
 
         filename = parcel.get('filename')
         file_id = FileService._generate_file_id(filename)
