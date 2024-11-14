@@ -12,9 +12,9 @@ logger:Logger = __import__('src').get_logger()
 
 
 class FileService(Agent):
-    def __init__(self, cfg):
+    def __init__(self, cfg, storage_root):
         super().__init__('file_service.services.wastepro', cfg)
-        self.storage_root = cfg.get("storage_root")
+        self.storage_root = storage_root
 
 
     def on_connected(self):

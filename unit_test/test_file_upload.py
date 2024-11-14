@@ -25,23 +25,23 @@ class TestAgent(unittest.TestCase):
     
     class ValidationAgent(Agent):
         def __init__(self):
-            config_test['storage_root'] = r'D:\Work\NCU\計畫\國環院廢棄物\wastepro\_upload'
             super().__init__(name='main', agent_config=config_test)
 
 
         def on_connected(self):
             self._subscribe('file_uploaded')
             
-            with open(r'unit_test\test_img.jpg', 'rb') as file:
+            filename = 'test_img.jpg'
+            with open(os.path.join(os.getcwd(), 'unit_test', filename), 'rb') as file:
                 content = file.read()
             pcl = Parcel(content, 'file_uploaded')
-            pcl.set('filename', 'test_img.jpg')
+            pcl.set('filename', filename)
             self._publish('FileUpload/FileService/Services', pcl.payload())
 
 
         def on_message(self, topic:str, data):
             logger.debug(self.M(f"topic: {topic}, len(data): {len(data)}"))
-            
+
             p = Parcel.from_text(data)
             TestAgent.file_id = p.get('file_id')
             TestAgent.filename = p.get('filename')
@@ -51,7 +51,10 @@ class TestAgent(unittest.TestCase):
         self.validation_agent = TestAgent.ValidationAgent()
         self.validation_agent.start_thread()
         
-        self.file_agent = FileService(config_test)
+        storage_root = os.path.join(os.getcwd(), '_upload')
+        if not os.path.exists(storage_root):
+            os.mkdir(storage_root)
+        self.file_agent = FileService(config_test, storage_root)
         self.file_agent.start()
 
 
