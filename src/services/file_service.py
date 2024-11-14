@@ -22,7 +22,7 @@ class FileService(Agent):
                 
         
     def _generate_file_id(filename):        
-        current_time = str(int(time.time() * 1000)) # Get the current time in milliseconds since the epoch
+        current_time = str(int(time.time() * 1000))
         combined_input = filename + current_time + str(random.randint(0, 999)).zfill(3)
         sha1_hash = hashlib.sha1(combined_input.encode()).hexdigest()
         generated_uuid = str(uuid.UUID(sha1_hash[:32])).replace('-', '')
@@ -40,11 +40,12 @@ class FileService(Agent):
         file_dir = os.path.join(self.storage_root, file_id[:2])
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
+            
         file_path = os.path.join(file_dir, f"{file_id}-{filename}")
         open_mode = "w" if isinstance(parcel.content, str) else "wb"
         with open(file_path, open_mode) as fp:
             fp.write(parcel.content)
-        logger.info(f"topic: {topic}, File saved.")
+        logger.info(f"filename: {filename} is saved.")
 
         if parcel.home_topic:
             resp = {
