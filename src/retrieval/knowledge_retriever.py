@@ -2,6 +2,7 @@ import signal
 import time
 
 from agentflow.core.agent import Agent
+from agentflow.core.parcel import Parcel
 import app_helper
 
 
@@ -21,12 +22,25 @@ class KnowledgeRetriever(Agent):
         self._subscribe('FileUpload/Retrieval', topic_handler=self._handle_fileupload)
         
         
-    def on_message(self, topic: str, data):
-        logger.debug(self.M(f"topic: {topic}, data: {data}"))
+    # def on_message(self, topic: str, data):
+    #     logger.debug(self.M(f"topic: {topic}, data: {data}"))
         
         
     def _handle_fileupload(self, topic, data):
-        logger.debug(f"topic: {topic}, {data}")
+        mdata = Parcel.from_bytes(data).managed_data
+        logger.debug(f"topic: {topic}, filename: {mdata.get('filename')}")
+        
+        def handle_file_saved(self, topic1, data1):
+            managed_data1 = Parcel.from_text(data).managed_data
+            logger.debug(f"topic: {topic}, filename: {managed_data1.get('file_id')}")
+            
+        home_topic=f'{self.tag}-{int(time.time()*1000)}/{topic}'
+        self._subscribe(home_topic, topic_handler=handle_file_saved)
+        
+        payload = Parcel(content=mdata['content'], home_topic=home_topic).payload()
+        self._publish('FileUpload/FileService/Services', payload)
+        
+        
         # file_info = pickle.loads(payload)
         # if not 'file_id' in file_info:
         #     file_info['file_id'] = ""
