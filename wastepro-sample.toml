@@ -1,0 +1,9 @@
+[broker]
+placeholder = ""
+
+[broker.mqtt]
+host = "localhost"
+port = 1883
+username = "aaa"
+password = "bbb"
+keepalive = 60
