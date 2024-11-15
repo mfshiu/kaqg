@@ -31,8 +31,8 @@ class TestAgent(unittest.TestCase):
         def on_connected(self):
             self._subscribe('file_uploaded')
             
-            filename = 'test_img.jpg'
-            with open(os.path.join(os.getcwd(), 'unit_test', filename), 'rb') as file:
+            filename = 'test_img1.jpg'
+            with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
                 content = file.read()
             pcl = Parcel(content, 'file_uploaded')
             pcl.set('filename', filename)
@@ -61,7 +61,7 @@ class TestAgent(unittest.TestCase):
     def _do_test_1(self):
         logger.debug(f'file_id: {TestAgent.file_id}')
         self.assertTrue(TestAgent.file_id)
-        self.assertEqual('test_img.jpg', TestAgent.filename)
+        self.assertEqual('test_img1.jpg', TestAgent.filename)
 
 
     def test_1(self):

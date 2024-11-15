@@ -22,23 +22,23 @@ class KnowledgeRetriever(Agent):
         self._subscribe('FileUpload/Retrieval', topic_handler=self._handle_fileupload)
         
         
-    # def on_message(self, topic: str, data):
-    #     logger.debug(self.M(f"topic: {topic}, data: {data}"))
-        
-        
     def _handle_fileupload(self, topic, data):
-        mdata = Parcel.from_bytes(data).managed_data
-        logger.debug(f"topic: {topic}, filename: {mdata.get('filename')}")
-        
-        def handle_file_saved(self, topic1, data1):
-            managed_data1 = Parcel.from_text(data).managed_data
-            logger.debug(f"topic: {topic}, filename: {managed_data1.get('file_id')}")
-            
+        this = self
+        pcl = Parcel.from_bytes(data)
+        # mdata = pcl.managed_data
+        # logger.debug(f"topic: {topic}, filename: {mdata.get('filename')}")
+
+        def handle_file_saved(_, data_uploaded):
+            mdata_uploaded = Parcel.from_text(data_uploaded).managed_data
+            logger.debug(f"topic: {topic}, filename: {mdata_uploaded.get('filename')}")
+            this._publish('001/Test', data_uploaded)
+
         home_topic=f'{self.tag}-{int(time.time()*1000)}/{topic}'
         self._subscribe(home_topic, topic_handler=handle_file_saved)
         
-        payload = Parcel(content=mdata['content'], home_topic=home_topic).payload()
-        self._publish('FileUpload/FileService/Services', payload)
+        # pcl = Parcel(content=mdata['content'], home_topic=home_topic)
+        pcl.set('home_topic', home_topic)
+        self._publish('FileUpload/FileService/Services', pcl.payload())
         
         
         # file_info = pickle.loads(payload)
