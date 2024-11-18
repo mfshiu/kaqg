@@ -31,6 +31,7 @@ class TestAgent(unittest.TestCase):
         def on_connected(self):
             self._subscribe('file_uploaded')
             
+            time.sleep(1)
             filename = 'test_img1.jpg'
             with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
                 content = file.read()
@@ -48,14 +49,14 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        self.validation_agent = TestAgent.ValidationAgent()
-        self.validation_agent.start_thread()
-        
         storage_root = os.path.join(os.getcwd(), '_upload')
         if not os.path.exists(storage_root):
             os.mkdir(storage_root)
         self.file_agent = FileService(config_test, storage_root)
         self.file_agent.start()
+
+        self.validation_agent = TestAgent.ValidationAgent()
+        self.validation_agent.start_thread()
 
 
     def _do_test_1(self):
@@ -75,8 +76,8 @@ class TestAgent(unittest.TestCase):
 
 
     def tearDown(self):
-        self.file_agent.terminate()
         self.validation_agent.terminate()
+        self.file_agent.terminate()
 
 
 

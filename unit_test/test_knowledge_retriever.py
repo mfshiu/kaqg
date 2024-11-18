@@ -30,6 +30,7 @@ class TestAgent(unittest.TestCase):
             self._subscribe('001/Test')
             
             for filename in ['test_img1.jpg', 'test_img2.jpg', 'test_img3.jpg']:
+                time.sleep(.5)
                 with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
                     content = file.read()
                 pcl = Parcel(content, 'file_uploaded')
@@ -46,9 +47,6 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        self.validation_agent = TestAgent.ValidationAgent()
-        self.validation_agent.start_thread()
-        
         storage_root = os.path.join(os.getcwd(), '_upload')
         if not os.path.exists(storage_root):
             os.mkdir(storage_root)
@@ -57,6 +55,9 @@ class TestAgent(unittest.TestCase):
         
         self.knowledge_retriever = KnowledgeRetriever(config_test)
         self.knowledge_retriever.start()
+
+        self.validation_agent = TestAgent.ValidationAgent()
+        self.validation_agent.start_thread()
 
 
     def _do_test_1(self):
@@ -68,7 +69,13 @@ class TestAgent(unittest.TestCase):
 
 
     def test_1(self):
-        time.sleep(3)
+        # time.sleep(5)
+        
+        for _ in range(10):
+            time.sleep(1)
+            if len(TestAgent.file_ids) == 3:
+                break
+            print('.', end='')
 
         try:
             self._do_test_1()
@@ -78,9 +85,9 @@ class TestAgent(unittest.TestCase):
 
 
     def tearDown(self):
+        self.validation_agent.terminate()
         self.knowledge_retriever.terminate()
         self.file_agent.terminate()
-        self.validation_agent.terminate()
 
 
 

@@ -1,3 +1,4 @@
+import random
 import signal
 import time
 
@@ -23,8 +24,12 @@ class KnowledgeRetriever(Agent):
         
         
     def _handle_fileupload(self, topic, data):
-        home_topic=f'{self.tag}-{int(time.time()*1000)}/{topic}'        
-        data_uploaded = self._publish_sync('FileUpload/FileService/Services', data, home_topic)
+        home_topic=f'{self.tag}-{int(time.time()*1000)}/{topic}'
+        # home_topic=f'{self.tag}-{random.randint(1, 100000)}/{topic}'
+        pcl = Parcel.from_bytes(data)
+        pcl.set('home_topic', home_topic)
+        data_uploaded = self._publish_sync('FileUpload/FileService/Services', pcl.payload(), home_topic)
+                
         mdata_uploaded = Parcel.from_text(data_uploaded).managed_data
         logger.debug(f"topic: {topic}, filename: {mdata_uploaded.get('filename')}")
         self._publish('001/Test', data_uploaded)

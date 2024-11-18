@@ -48,11 +48,11 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        self.validation_agent = TestAgent.ValidationAgent()
-        self.validation_agent.start_thread()
-        
         self.agent_resp = AgentResponse('aaa', config_test)
         self.agent_resp.start()
+
+        self.validation_agent = TestAgent.ValidationAgent()
+        self.validation_agent.start_thread()
 
 
     def _do_test_1(self):
@@ -72,8 +72,8 @@ class TestAgent(unittest.TestCase):
 
 
     def tearDown(self):
-        self.agent_resp.terminate()
         self.validation_agent.terminate()
+        self.agent_resp.terminate()
 
 
 
