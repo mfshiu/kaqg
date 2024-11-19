@@ -3,7 +3,7 @@ import signal
 import time
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import Parcel
+from agentflow.core.parcel import BinaryParcel, Parcel
 import app_helper
 
 
@@ -20,21 +20,19 @@ class KnowledgeRetriever(Agent):
 
     def on_connected(self):
         logger.debug(f"on_connected")
-        self._subscribe('FileUpload/Retrieval', topic_handler=self._handle_fileupload)
+        self._subscribe('FileUpload/Retrieval', topic_handler=self._handle_retrieval)
         
         
-    def _handle_fileupload(self, topic, data):
-        home_topic=f'{self.tag}-{int(time.time()*1000)}/{topic}'
-        # home_topic=f'{self.tag}-{random.randint(1, 100000)}/{topic}'
-        pcl = Parcel.from_bytes(data)
-        pcl.set('home_topic', home_topic)
-        data_uploaded = self._publish_sync('FileUpload/FileService/Services', pcl.payload(), home_topic)
-                
-        mdata_uploaded = Parcel.from_text(data_uploaded).managed_data
-        logger.debug(f"topic: {topic}, filename: {mdata_uploaded.get('filename')}")
+    def _handle_retrieval(self, topic, data):
+        # Upload the file
+        topic_return=f'{self.tag}-{int(time.time()*1000)}/{topic}'
+        data_uploaded = self._publish_sync('FileUpload/FileService/Services', BinaryParcel(data, topic_return))
+        logger.debug(f"topic: {topic}, filename: {data_uploaded.get('filename')}")
+        
+        
         self._publish('001/Test', data_uploaded)
-        
-        
+
+
     # def _handle_fileupload(self, topic, data):
     #     this = self
     #     pcl = Parcel.from_bytes(data)
@@ -46,11 +44,11 @@ class KnowledgeRetriever(Agent):
     #         logger.debug(f"topic: {topic}, filename: {mdata_uploaded.get('filename')}")
     #         this._publish('001/Test', data_uploaded)
 
-    #     home_topic=f'{self.tag}-{int(time.time()*1000)}/{topic}'
-    #     self._subscribe(home_topic, topic_handler=handle_file_saved)
+    #     topic_return=f'{self.tag}-{int(time.time()*1000)}/{topic}'
+    #     self._subscribe(topic_return, topic_handler=handle_file_saved)
         
-    #     # pcl = Parcel(content=mdata['content'], home_topic=home_topic)
-    #     pcl.set('home_topic', home_topic)
+    #     # pcl = Parcel(content=mdata['content'], topic_return=topic_return)
+    #     pcl.set('topic_return', topic_return)
     #     self._publish('FileUpload/FileService/Services', pcl.payload())
         
 

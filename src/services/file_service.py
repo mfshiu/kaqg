@@ -31,10 +31,10 @@ class FileService(Agent):
 
 
     def handle_file_upload(self, topic:str, data):
-        parcel = Parcel.from_bytes(data)
-        logger.debug(f"topic: {topic}, filename: {parcel.get('filename')}, content size: {len(parcel.content)}")
+        # parcel = Parcel.from_bytes(data)
+        logger.verbose(f"topic: {topic}, filename: {data.get('filename')}, content size: {len(data.get('content'))}")
 
-        filename = parcel.get('filename')
+        filename = data.get('filename')
         file_id = FileService._generate_file_id(filename)
         
         file_dir = os.path.join(self.storage_root, file_id[:2])
@@ -42,14 +42,18 @@ class FileService(Agent):
             os.makedirs(file_dir)
 
         file_path = os.path.join(file_dir, f"{file_id}-{filename}")
-        open_mode = "w" if isinstance(parcel.content, str) else "wb"
+        content = data.get('content')
+        open_mode = "w" if isinstance(content, str) else "wb"
         with open(file_path, open_mode) as fp:
-            fp.write(parcel.content)
+            fp.write(content)
         logger.info(f"filename: {filename} is saved.")
 
-        if parcel.home_topic:
-            resp = {
-                'file_id': file_id,
-                'filename': filename,
+        return {
+            'file_id': file_id,
+            'filename': filename,
             }
-            self._publish(parcel.home_topic, resp)
+        # if data.topic_return:
+        #     self._publish(data.topic_return, {
+        #         'file_id': file_id,
+        #         'filename': filename,
+        #     })

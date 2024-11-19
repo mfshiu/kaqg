@@ -2,14 +2,11 @@ import sys
 import os
 sys.path.append(os.path.abspath(".."))  # Adjust path if necessary
 
-import random
-import threading
 import time
 import unittest
 
 from agentflow.core.agent import Agent
-from agentflow.core.config import EventHandler
-from agentflow.core.parcel import Parcel
+from agentflow.core.parcel import BinaryParcel, Parcel
 from services.file_service import FileService
 from unit_test.config_test import config_test
 
@@ -35,17 +32,19 @@ class TestAgent(unittest.TestCase):
             filename = 'test_img1.jpg'
             with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
                 content = file.read()
-            pcl = Parcel(content, 'file_uploaded')
-            pcl.set('filename', filename)
-            self._publish('FileUpload/FileService/Services', pcl.payload())
+            # pcl = BinaryParcel(content, 'file_uploaded')
+            # pcl.set('filename', filename)
+            pcl = BinaryParcel({
+                'content': content,
+                'filename': filename}, 'file_uploaded')
+            self._publish('FileUpload/FileService/Services', pcl)
 
 
-        def on_message(self, topic:str, data):
-            logger.debug(self.M(f"topic: {topic}, len(data): {len(data)}"))
+        def on_message(self, topic:str, data:dict):
+            logger.debug(self.M(f"topic: {topic}, data: {data}"))
 
-            p = Parcel.from_text(data)
-            TestAgent.file_id = p.get('file_id')
-            TestAgent.filename = p.get('filename')
+            TestAgent.file_id = data.get('file_id')
+            TestAgent.filename = data.get('filename')
 
 
     def setUp(self):

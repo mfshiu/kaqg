@@ -6,7 +6,7 @@ import time
 import unittest
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import Parcel
+from agentflow.core.parcel import BinaryParcel
 from retrieval.knowledge_retriever import KnowledgeRetriever
 from services.file_service import FileService
 from unit_test.config_test import config_test
@@ -33,17 +33,17 @@ class TestAgent(unittest.TestCase):
                 time.sleep(.5)
                 with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
                     content = file.read()
-                pcl = Parcel(content, 'file_uploaded')
-                pcl.set('filename', filename)
-                self._publish('FileUpload/Retrieval', pcl.payload())
+                pcl = BinaryParcel({
+                    'content': content,
+                    'filename': filename})
+                self._publish('FileUpload/Retrieval', pcl)
 
 
         def on_message(self, topic:str, data):
             logger.debug(self.M(f"topic: {topic}, len(data): {len(data)}"))
 
-            p = Parcel.from_text(data)
-            TestAgent.file_ids.append(p.get('file_id'))
-            TestAgent.filenames.append(p.get('filename'))
+            TestAgent.file_ids.append(data.get('file_id'))
+            TestAgent.filenames.append(data.get('filename'))
 
 
     def setUp(self):
