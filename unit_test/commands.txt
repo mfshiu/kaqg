@@ -1,0 +1,4 @@
+python -m unittest discover -s unit_test
+python -m unittest unit_test/test_file_upload.py
+python -m unittest unit_test/test_knowledge_retriever.py
+python -m unittest unit_test/test_publish_sync.py

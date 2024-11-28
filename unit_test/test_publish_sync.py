@@ -7,7 +7,7 @@ import unittest
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import Parcel
-from retrieval.knowledge_retriever import KnowledgeRetriever
+from retrieval.pdf_retriever import PdfRetriever
 from services.file_service import FileService
 from unit_test.config_test import config_test
 
@@ -22,16 +22,18 @@ class AgentResponse(Agent):
         self._subscribe('topic_1')
     
     
-    def on_message(self, topic:str, data):
+    def on_message(self, topic:str, pcl:Parcel):
+        data = pcl.content
         logger.debug(self.M(f"topic: {topic}, data: {data}"))
         time.sleep(1)
-        self._publish('topic_2', int(data)+1)
+        return int(data) + 1
 
 
 
 class TestAgent(unittest.TestCase):
     data_resp = 0
     data_resp_a = 0
+    data_resp_b = 0
     data_got = False
     
     class ValidationAgent(Agent):
@@ -42,8 +44,9 @@ class TestAgent(unittest.TestCase):
         def on_connected(self):
             time.sleep(1)
             # self._publish('topic_1', 1)
-            TestAgent.data_resp = int(self._publish_sync('topic_1', 1, 'topic_2'))
-            TestAgent.data_resp_a = int(self._publish_sync('topic_1', TestAgent.data_resp, 'topic_2'))
+            TestAgent.data_resp = int(self._publish_sync('topic_1', 1, 'topic_2').content)
+            TestAgent.data_resp_a = int(self._publish_sync('topic_1', TestAgent.data_resp, 'topic_2').content)
+            TestAgent.data_resp_b = int(self._publish_sync('topic_1', TestAgent.data_resp_a).content)
             TestAgent.data_got = True
 
 
@@ -59,10 +62,11 @@ class TestAgent(unittest.TestCase):
         self.assertTrue(TestAgent.data_got)
         self.assertEqual(TestAgent.data_resp, 2)
         self.assertEqual(TestAgent.data_resp_a, 3)
+        self.assertEqual(TestAgent.data_resp_b, 4)
 
 
     def test_1(self):
-        time.sleep(4)
+        time.sleep(5)
 
         try:
             self._do_test_1()

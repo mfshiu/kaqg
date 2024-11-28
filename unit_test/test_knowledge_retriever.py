@@ -6,9 +6,10 @@ import time
 import unittest
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import BinaryParcel
-from retrieval.knowledge_retriever import KnowledgeRetriever
+from agentflow.core.parcel import BinaryParcel, Parcel
+from retrieval.pdf_retriever import PdfRetriever
 from services.file_service import FileService
+from services.kg_service import KnowledgeGraphService
 from unit_test.config_test import config_test
 
 
@@ -27,7 +28,7 @@ class TestAgent(unittest.TestCase):
 
 
         def on_connected(self):
-            self._subscribe('001/Test')
+            self._subscribe(PdfRetriever.TOPIC_RETRIEVED)
             
             for filename in ['test_img1.jpg', 'test_img2.jpg', 'test_img3.jpg']:
                 time.sleep(.5)
@@ -36,14 +37,14 @@ class TestAgent(unittest.TestCase):
                 pcl = BinaryParcel({
                     'content': content,
                     'filename': filename})
-                self._publish('FileUpload/Retrieval', pcl)
+                self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
 
-        def on_message(self, topic:str, data):
-            logger.debug(self.M(f"topic: {topic}, len(data): {len(data)}"))
+        def on_message(self, topic:str, pcl:Parcel):
+            logger.debug(self.M(f"topic: {topic}, len(data): {len(pcl.content)}"))
 
-            TestAgent.file_ids.append(data.get('file_id'))
-            TestAgent.filenames.append(data.get('filename'))
+            TestAgent.file_ids.append(pcl['file_id'])
+            TestAgent.filenames.append(pcl['filename'])
 
 
     def setUp(self):
@@ -53,7 +54,10 @@ class TestAgent(unittest.TestCase):
         self.file_agent = FileService(config_test, storage_root)
         self.file_agent.start()
         
-        self.knowledge_retriever = KnowledgeRetriever(config_test)
+        self.kgservice = KnowledgeGraphService(config_test)
+        self.kgservice.start()
+        
+        self.knowledge_retriever = PdfRetriever(config_test)
         self.knowledge_retriever.start()
 
         self.validation_agent = TestAgent.ValidationAgent()
@@ -86,6 +90,7 @@ class TestAgent(unittest.TestCase):
 
     def tearDown(self):
         self.validation_agent.terminate()
+        self.kgservice.terminate()
         self.knowledge_retriever.terminate()
         self.file_agent.terminate()
 

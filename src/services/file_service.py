@@ -1,24 +1,28 @@
 import hashlib
+import mimetypes
 import os
 import random
 import time
 import uuid
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import Parcel
+from agentflow.core.parcel import BinaryParcel
 
 from logging import Logger
 logger:Logger = __import__('src').get_logger()
 
 
 class FileService(Agent):
+    TOPIC_FILE_UPLOAD = "FileUpload/FileService/Services"
+    
+    
     def __init__(self, cfg, storage_root):
         super().__init__('file_service.services.wastepro', cfg)
         self.storage_root = storage_root
 
 
     def on_connected(self):
-        self._subscribe("FileUpload/FileService/Services", "str", self.handle_file_upload)
+        self._subscribe(FileService.TOPIC_FILE_UPLOAD, "str", self.handle_file_upload)
 
 
     def _generate_file_id(filename):        
@@ -30,19 +34,20 @@ class FileService(Agent):
         return generated_uuid
 
 
-    def handle_file_upload(self, topic:str, data):
-        # parcel = Parcel.from_bytes(data)
-        logger.verbose(f"topic: {topic}, filename: {data.get('filename')}, content size: {len(data.get('content'))}")
+    def handle_file_upload(self, topic:str, pcl:BinaryParcel):
+        file_info = pcl.content
+        logger.verbose(f"topic: {topic}, filename: {file_info.get('filename')}, content size: {len(file_info.get('content'))}")
 
-        filename = data.get('filename')
+        filename = file_info.get('filename')
         file_id = FileService._generate_file_id(filename)
+        mime_type, encoding = mimetypes.guess_type(filename)
         
         file_dir = os.path.join(self.storage_root, file_id[:2])
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
 
         file_path = os.path.join(file_dir, f"{file_id}-{filename}")
-        content = data.get('content')
+        content = file_info.get('content')
         open_mode = "w" if isinstance(content, str) else "wb"
         with open(file_path, open_mode) as fp:
             fp.write(content)
@@ -51,9 +56,7 @@ class FileService(Agent):
         return {
             'file_id': file_id,
             'filename': filename,
-            }
-        # if data.topic_return:
-        #     self._publish(data.topic_return, {
-        #         'file_id': file_id,
-        #         'filename': filename,
-        #     })
+            'mime_type': mime_type,
+            'encoding': encoding,
+            'file_path': file_path,
+        }

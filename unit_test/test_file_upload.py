@@ -40,11 +40,12 @@ class TestAgent(unittest.TestCase):
             self._publish('FileUpload/FileService/Services', pcl)
 
 
-        def on_message(self, topic:str, data:dict):
-            logger.debug(self.M(f"topic: {topic}, data: {data}"))
+        def on_message(self, topic:str, pcl:Parcel):
+            file_info:dict = pcl.content
+            logger.debug(self.M(f"topic: {topic}, file_info: {file_info}"))
 
-            TestAgent.file_id = data.get('file_id')
-            TestAgent.filename = data.get('filename')
+            TestAgent.file_id = file_info.get('file_id')
+            TestAgent.filename = file_info.get('filename')
 
 
     def setUp(self):
