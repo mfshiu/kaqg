@@ -29,6 +29,7 @@ class KnowledgeGraphService(Agent):
     def handle_create(self, topic:str, pcl:TextParcel):
         kg_id = 0
         topic_triplets_add = f'{kg_id}/{KnowledgeGraphService.TOPIC_TRIPLETS_ADD}'
+        # Create KG
         self._subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
         
         return {

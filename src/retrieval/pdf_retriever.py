@@ -44,7 +44,7 @@ class PdfRetriever(Agent):
         kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
         # kg_info: {
         #     'kg_id': kg_id,
-        #     'access_topic': access_topic,
+        #     'topic_triplets_add': topic_triplets_add,
         # }
         
         pages = self.read_pages(file_info['file_path'])
