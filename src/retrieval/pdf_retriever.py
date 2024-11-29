@@ -39,6 +39,7 @@ class PdfRetriever(Agent):
         #     'mime_type': mime_type,
         #     'encoding': encoding,
         #     'file_path': file_path,
+        #     'toc': table_of_content,
         # }
         
         kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
@@ -48,8 +49,12 @@ class PdfRetriever(Agent):
         # }
         
         pages = self.read_pages(file_info['file_path'])
+        if 'toc' not in file_info:
+            # Set all pages belong to 'Root' if 
+            file_info['toc'] = [('Root', 0, len(pages), [])]
         for page_number, page_content in enumerate(pages):
-            triplets = self.extract_triplets(page_content)
+            sections = self.locate_sections(page_number, file_info['toc'])
+            triplets = self.extract_triplets(page_content, sections)
             self._publish(kg_info['topic_triplets_add'], {
                 'source_type': 'pdf',
                 'file_id': file_info['file_id'],
@@ -59,6 +64,57 @@ class PdfRetriever(Agent):
             })
 
         self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
+        
+
+    chapter = tuple[str, int, int, list['chapter']]
+    def locate_sections(self, page_number: int, toc: list[chapter], parent_hierarchy: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+        """
+        遞迴查找多層章節結構，根據頁碼返回所有匹配的層級，並以 list of tuples 格式返回。
+        
+        :param page_number: 查詢的頁碼
+        :param toc: 目錄結構 (遞迴形式)
+        :param parent_hierarchy: 當前章節的父層級，用於組合完整層次
+        :return: 包含所有匹配層級的 list of tuples
+
+        Example:
+        toc = [
+            ('chapter1', 1, 9, [
+                ('ch1-1', 1, 4, [
+                    ('ch1-1-1', 1, 2, []),
+                    ('ch1-1-2', 2, 4, [])
+                ]),
+                ('ch1-2', 4, 9, [])
+            ]),
+            ('chapter2', 10, 15, [
+                ('ch2-1', 10, 12, []),
+                ('ch2-2', 13, 15, [])
+            ])
+        ]
+        
+        Result of toc:
+        Page 2 belongs to: [('chapter1',), ('chapter1', 'ch1-1'), ('chapter1', 'ch1-1', 'ch1-1-1'), ('chapter1', 'ch1-1', 'ch1-1-2')]
+        Page 5 belongs to: [('chapter1',), ('chapter1', 'ch1-2')]
+        Page 12 belongs to: [('chapter2',), ('chapter2', 'ch2-1')]
+        Page 20 belongs to: []
+        """
+        def find_sections(page_number: int, toc: list[PdfRetriever.chapter], parent_hierarchy: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+            matches = []
+            for chapter in toc:
+                name, start_page, end_page, subchapters = chapter
+                current_hierarchy = parent_hierarchy + (name,)
+                
+                if start_page <= page_number <= end_page:
+                    matches.append(current_hierarchy)   # 當前章節匹配，加入結果
+                    # 檢查子章節是否也匹配
+                    if subchapters:
+                        matches.extend(find_sections(page_number, subchapters, current_hierarchy))
+            
+            return matches
+        
+        sections = find_sections(page_number, toc, parent_hierarchy)
+        if not sections:
+            sections = [('Root',)]
+        return sections
 
 
     # TODO: Implement this method
@@ -81,7 +137,7 @@ class PdfRetriever(Agent):
 
 
     # TODO: Implement this method
-    def extract_triplets(self, page_content) -> list[tuple[dict, dict, dict]]:
+    def extract_triplets(self, page_content, sections) -> list[tuple[dict, dict, dict]]:
         """
         Convert the page content into triplets. The triplets should contain below types of relationships:
         1. The relationship from the sub-structure node to the structure node. (part_of)
@@ -95,6 +151,8 @@ class PdfRetriever(Agent):
 
         Args:
             page_content (str): The text content of a single page.
+            sections (list of tuples): [(chapter, section, sub-section, ..), ..]
+                ex: [('chapter1',), ('chapter1', 'ch1-1'), ('chapter1', 'ch1-1', 'ch1-1-1'), ('chapter1', 'ch1-1', 'ch1-1-2')]
             
         Returns:
             list: A list of tuples, each tuple containing three dictionaries,
