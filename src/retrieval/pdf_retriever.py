@@ -152,7 +152,7 @@ class PdfRetriever(Agent):
         Args:
             page_content (str): The text content of a single page.
             sections (list of tuples): [(chapter, section, sub-section, ..), ..]
-                ex: [('chapter1',), ('chapter1', 'ch1-1'), ('chapter1', 'ch1-1', 'ch1-1-1'), ('chapter1', 'ch1-1', 'ch1-1-2')]
+                ex: [('chapter1',), ('chapter1', 'ch1-1'), ('chapter1', 'ch1-1', 'ch1-1-1')]
             
         Returns:
             list: A list of tuples, each tuple containing three dictionaries,
