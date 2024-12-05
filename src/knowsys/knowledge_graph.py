@@ -8,7 +8,8 @@ class KnowledgeGraph:
     password = "12345678"
     
 
-    def __init__(self) -> None:
+    def __init__(self, id) -> None:
+        self.id = id
         self.driver = GraphDatabase.driver(KnowledgeGraph.uri, auth=(KnowledgeGraph.username, KnowledgeGraph.password))
     
     

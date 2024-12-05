@@ -57,14 +57,15 @@ class KnowledgeGraphService(Agent):
     def query_sections(self, topic:str, pcl:TextParcel):
         conditions:dict = pcl.content
         kg = knowsys.get_knowledge_graph(conditions['kg_id'])
-        nodes_result = kg.query("MATCH (n) RETURN id(n) AS id, n.name AS name")
-        nodes = {record['id']: {'name': record.get('name', None)} for record in nodes_result}
         
-        relationships_result = kg.query("""MATCH (a)-[r]->(b) RETURN 
-                                   id(r) AS id, 
-                                   type(r) AS type, 
-                                   id(a) AS start_node, 
-                                   id(b) AS end_node""")
+        query_result = kg.query("MATCH (n:Structure) RETURN id(n) AS id, n.name AS name")
+        nodes = {record['id']: {'name': record.get('name', None)} for record in query_result}
+        
+        query_result = kg.query("""MATCH (a:Structure)-[r]->(b:Structure) RETURN 
+                                id(r) AS id, 
+                                type(r) AS type, 
+                                id(a) AS start_node, 
+                                id(b) AS end_node""")
         relationships = [
             {
                 'id': record['id'],
@@ -72,7 +73,7 @@ class KnowledgeGraphService(Agent):
                 'start_node': record['start_node'],
                 'end_node': record['end_node']
             }
-            for record in relationships_result
+            for record in query_result
         ]
         
         return {
