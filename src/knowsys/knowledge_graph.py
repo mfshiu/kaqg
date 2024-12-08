@@ -10,6 +10,7 @@ class KnowledgeGraph:
 
     def __init__(self, id) -> None:
         self.id = id
+        self.name = None
         self.driver = GraphDatabase.driver(KnowledgeGraph.uri, auth=(KnowledgeGraph.username, KnowledgeGraph.password))
     
     
@@ -18,4 +19,4 @@ class KnowledgeGraph:
             query_result = session.run(query_statement)
             
         return query_result
-        
+

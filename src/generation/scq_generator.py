@@ -56,10 +56,10 @@ class SingleChoiceGenerator(Agent):
         
         # From fact nodes to question
         source_sentences = self.generate_source_sentences(fact_nodes)
-        queation = self.generate_question(source_sentences, question_criteria['difficulty'])
-        queation['question_criteria'] = question_criteria
+        question = self.generate_question(source_sentences, question_criteria['difficulty'])
+        question['question_criteria'] = question_criteria
 
-        return queation
+        return question
     
     
     def choice_concept(self, concept_nodes):
