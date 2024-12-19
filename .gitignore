@@ -160,10 +160,17 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+_bak/
 _log/
 _output/
+_temp/
 _upload/
+ckip_data/
 exe_test/
+src/knowsys/data/
+
 wastepro.toml
 mosquitto.bat
 config_test.py
+

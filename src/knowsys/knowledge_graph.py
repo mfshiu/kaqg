@@ -12,7 +12,7 @@ class KnowledgeGraph:
         self.id = id
         self.name = id
         manager = docker_management.DockerManager()
-        self.url,self.uri=manager.open_KG(id)
+        self.url,self.uri = manager.open_KG(id)
         self.driver = GraphDatabase.driver(self.uri)
     
     
@@ -22,9 +22,10 @@ class KnowledgeGraph:
             
         return query_result
     
+    
 if __name__ == '__main__':
     KG = KnowledgeGraph("test_KG")
-    test_querys ="""
+    test_querys = """
             CREATE (:Technology {name: 'SURGE', alias: 'SURGE, 特別是對比學習版本'});
             CREATE (:Technology {name: 'Baselines', alias: 'Baselines, 基準'});
             CREATE (:Technology {name: 'Retrieval Variants', alias: 'Retrieval Variants, 檢索變體'});
@@ -35,6 +36,6 @@ if __name__ == '__main__':
             MATCH (a {name: '對比學習'}), (b {name: '問答生成'}) CREATE (a)-[:is_effective_in]->(b);
             """
     for cypher in test_querys.splitlines():
-        if cypher.strip()!="":
+        if cypher.strip() != "":
             KG.query(cypher.strip())
 

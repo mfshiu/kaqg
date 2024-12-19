@@ -5,6 +5,7 @@ import shutil
 import time
 import requests
 
+
 class DockerManager:
     """
     Docker 管理員。
@@ -24,10 +25,12 @@ class DockerManager:
         self.detach = True
         self.volumns  = os.path.join(os.getcwd(),"src/knowsys/data")
 
+
     # 檢查端口是否已被占用
     def is_port_in_use(self,port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('localhost', port)) == 0
+
 
     # 獲取空閒端口
     def get_free_port(self,start_port):
@@ -35,6 +38,7 @@ class DockerManager:
         while self.is_port_in_use(port):
             port += 1
         return port
+
 
     def wait_for_KG(self, http_port, timeout=500):
         """檢查 Neo4j 是否在 7474 端口上啟動，最多等待 timeout 秒"""
@@ -58,6 +62,7 @@ class DockerManager:
 
         print("\nTimed out waiting for Neo4j to start.")
         return False
+    
     
     def create_container(self,kgName):
         """
@@ -101,6 +106,7 @@ class DockerManager:
         except docker.errors.APIError as e:
             print(f"Error creating container: {e}")
             return None
+          
           
     def open_KG(self,kgName):
         """
@@ -157,6 +163,7 @@ class DockerManager:
             names.append(container.name)
         return details,names
     
+    
     def list_KGs(self):
         """
         回傳一個list包含所有已建立的KG。
@@ -171,6 +178,7 @@ class DockerManager:
         directories = [item for item in items if os.path.isdir(os.path.join(os.path.join(self.datapath, 'neo4j_KGs'),item))]
         return directories
     
+    
     def stop_all(self):
         """
         停止所有正在運行的KG container.
@@ -179,6 +187,7 @@ class DockerManager:
             if kgName in self.list_KGs():
                 self.stop_KG(kgName)
         print("All KG containers have been stopped.")
+
 
     def delete_KG(self,kgName):
         """
@@ -191,6 +200,7 @@ class DockerManager:
             shutil.rmtree(directory)
         except:
             pass
+
 
     def delete_all_KGs(self):
         """
