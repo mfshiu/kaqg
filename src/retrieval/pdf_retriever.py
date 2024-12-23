@@ -19,7 +19,7 @@ class PdfRetriever(Agent):
 
     def __init__(self, config:dict):
         logger.info(f"config: {config}")
-        super().__init__(name='retrieval.wp', agent_config=config)
+        super().__init__(name='pdf.retrieval.wp', agent_config=config)
 
 
     def on_connected(self):
