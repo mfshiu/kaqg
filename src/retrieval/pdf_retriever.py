@@ -6,11 +6,10 @@ from agentflow.core.parcel import BinaryParcel, Parcel
 import app_helper
 from services.file_service import FileService
 from services.kg_service import KnowledgeGraphService
-
+from .extract_tool import *
 
 from logging import Logger
 logger:Logger = __import__('wastepro').get_logger()
-
 
 
 class PdfRetriever(Agent):
@@ -181,7 +180,8 @@ class PdfRetriever(Agent):
         ，經統計 104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%
         ，其餘非採再利用部分則以掩埋方式進行最終處置。 
         """
-        # Example of return.        
+        # Example of return.   
+        """
         triplets = [
             ({'type': 'structure', 'name': '(三) 垃圾焚化灰渣再利用'}, 
             {'name': 'part_of'}, 
@@ -203,6 +203,24 @@ class PdfRetriever(Agent):
             {'name': '委外再利用'}, 
             {'type': 'fact', 'name': '焚化廠底渣', 'aliases': ['incineration plant bottom ash']}),
         ]
+        """  
+
+        # extract facts and concepts in LLM
+        factes, concepts, entity_hierarchy = get_concept_n_fact(chat, page_content)
+        # extract fact-relationship-fact in LLM
+        facts_pairs = get_facts_pairs(factes, page_content)
+        # get aliases and save as dict in LLM
+        aliases_keys = factes + concepts
+        aliases_table = get_aliases(chat, aliases_keys)
+
+        # start to generate triplets
+        pairer = SectionPairer()
+        pairer.pair_sections_with_facts(sections, entity_hierarchy, aliases_table)
+        pairer.pair_sections_with_concepts(sections, concepts, aliases_table)
+        pairer.pair_lower_to_higher_sections(sections)
+        pairer.pair_facts_and_facts(facts_pairs)
+
+        triplets = pairer.get_results()
         return triplets
 
 
