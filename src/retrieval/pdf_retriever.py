@@ -9,6 +9,8 @@ from services.kg_service import KnowledgeGraphService
 
 
 from logging import Logger
+
+from src.retrieval.pdf_tool import PdfImport
 logger:Logger = __import__('wastepro').get_logger()
 
 
@@ -128,12 +130,16 @@ class PdfRetriever(Agent):
             list: A list of texts, including page content, table explanations, and image descriptions. The items in the list correspond to the page order.
         """
         
+        pdf_import = PdfImport(file_path)
+        return pdf_import.extract_text()
+        
+        
         # Example of return.
-        return [
-            '104 年全國各縣市焚化底渣產量約占焚化量之 15%。',
-            '環境部已提供經費補助，鼓勵縣市政府進行分選後供為營建替代級配材料再利用。',
-            '垃圾焚化廠焚化底渣再利用管理方式：此公告內容係針對底渣之再利用機構、產品分類、用途及使用地點進行管理要求。',
-        ]
+        # return [
+        #     '104 年全國各縣市焚化底渣產量約占焚化量之 15%。',
+        #     '環境部已提供經費補助，鼓勵縣市政府進行分選後供為營建替代級配材料再利用。',
+        #     '垃圾焚化廠焚化底渣再利用管理方式：此公告內容係針對底渣之再利用機構、產品分類、用途及使用地點進行管理要求。',
+        # ]
 
 
     # TODO: Implement this method

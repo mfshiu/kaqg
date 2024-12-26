@@ -56,6 +56,7 @@ class SingleChoiceGenerator(Agent):
         
         # From fact nodes to question
         source_sentences = self.generate_source_sentences(fact_nodes)
+        
         question = self.generate_question(source_sentences, question_criteria['difficulty'])
         question['question_criteria'] = question_criteria
 
@@ -67,6 +68,10 @@ class SingleChoiceGenerator(Agent):
     
     
     def generate_question(self, source_sentences, difficulty):
+        # difficulty: 30, 50, 70
+        # 丙：10分 for difficulty 30
+        # 乙：14分 for difficulty 50
+        # 甲：18分 for difficulty 70
         queation = {
             'type': 'SCQ',
             'stem': 'The question stem',

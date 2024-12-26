@@ -33,6 +33,7 @@ class PdfImport:
         self.extracted_images = []
         self.extracted_tables = []
 
+
     @staticmethod
     def _remove_non_latin_space(text: str):
         # 移除非拉丁字元之間的空格
@@ -46,26 +47,44 @@ class PdfImport:
                     pass  # 非拉丁字元，保留
         return ''.join(words)
 
+
     def extract_text(self):
+        pages = []
+        
         # 提取 PDF 文件的文字內容
         logger.info("開始提取文字內容")
-        try:
-            with pdfplumber.open(self.pdf_path) as pdf:
-                for page_index, page in enumerate(pdf.pages):
-                    text = page.extract_text()
-                    if text:
-                        text = text.replace("\n", "")
-                        text = self._remove_non_latin_space(text)
-                        logger.debug(f"PDF 第 {page_index+1} 頁文字:\n{text[:200]}...")
-                        with self.text_lock:
-                            self.extracted_text += text
-            # 將提取的文字內容寫入檔案，存放至 _output 資料夾中
-            text_file_path = os.path.join('_output', 'output_text.txt')
-            with open(text_file_path, 'w', encoding='utf-8') as f:
-                f.write(self.extracted_text)
-            logger.info(f"文字內容提取完成，已保存到 {text_file_path}")
-        except Exception as e:
-            logger.error(f"提取文字時發生錯誤: {e}")
+        with pdfplumber.open(self.pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    text = text.replace("\n", "")
+                    text = self._remove_non_latin_space(text)
+                    pages.append(text)
+                    
+        return pages
+
+
+    # def extract_text(self):
+    #     # 提取 PDF 文件的文字內容
+    #     logger.info("開始提取文字內容")
+    #     try:
+    #         with pdfplumber.open(self.pdf_path) as pdf:
+    #             for page_index, page in enumerate(pdf.pages):
+    #                 text = page.extract_text()
+    #                 if text:
+    #                     text = text.replace("\n", "")
+    #                     text = self._remove_non_latin_space(text)
+    #                     logger.debug(f"PDF 第 {page_index+1} 頁文字:\n{text[:200]}...")
+    #                     with self.text_lock:
+    #                         self.extracted_text += text
+    #         # 將提取的文字內容寫入檔案，存放至 _output 資料夾中
+    #         text_file_path = os.path.join('_output', 'output_text.txt')
+    #         with open(text_file_path, 'w', encoding='utf-8') as f:
+    #             f.write(self.extracted_text)
+    #         logger.info(f"文字內容提取完成，已保存到 {text_file_path}")
+    #     except Exception as e:
+    #         logger.error(f"提取文字時發生錯誤: {e}")
+
 
     def _image_percent_black(self, image):
         # 計算圖像中黑色像素的比例
@@ -79,6 +98,7 @@ class PdfImport:
         total_pixels = image_np[:, :, 0].size
         percent_black = (n_black / total_pixels) * 100
         return percent_black
+
 
     def extract_images(self):
         # 提取 PDF 文件中的圖像
@@ -116,6 +136,7 @@ class PdfImport:
         except Exception as e:
             logger.error(f"提取圖像時發生錯誤: {e}")
 
+
     def extract_tables(self):
         # 提取 PDF 文件中的表格
         logger.info("開始提取表格")
@@ -140,6 +161,7 @@ class PdfImport:
             logger.info("表格提取完成")
         except Exception as e:
             logger.error(f"提取表格時發生錯誤: {e}")
+
 
     def process(self):
         # 創建執行緒來處理文字提取
