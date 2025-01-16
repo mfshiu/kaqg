@@ -53,15 +53,15 @@ class SingleChoiceGenerator(Agent):
         fact_nodes = self.retrieve_fact_nodes(target_concept) # Must be sorted.
         if not fact_nodes:
             raise ValueError(f"Unable to generate any questions from the concept: {target_concept}")
-        
+
         # From fact nodes to question
         source_sentences = self.generate_source_sentences(fact_nodes)
-        
+
         question = self.generate_question(source_sentences, question_criteria['difficulty'])
         question['question_criteria'] = question_criteria
 
         return question
-    
+
     
     def choice_concept(self, concept_nodes):
         return random.choice(concept_nodes)
