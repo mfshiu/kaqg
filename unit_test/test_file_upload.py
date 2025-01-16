@@ -1,18 +1,19 @@
-import sys
-import os
-sys.path.append(os.path.abspath(".."))  # Adjust path if necessary
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import time
 import unittest
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
+import app_helper, log_helper
 from services.file_service import FileService
-from unit_test.config_test import config_test
-
 
 from logging import Logger
-logger:Logger = __import__('wastepro').get_logger()
+logger:Logger = __import__('agentflow').get_logger()
+
+
+config_test = app_helper.get_agent_config()
 
 
 
@@ -77,9 +78,12 @@ class TestAgent(unittest.TestCase):
 
     def tearDown(self):
         self.validation_agent.terminate()
-        self.file_agent.terminate()
+        if hasattr(self, 'file_agent'):
+            self.file_agent.terminate()
 
 
 
 if __name__ == '__main__':
+    logger = log_helper.get_logger()
+
     unittest.main()

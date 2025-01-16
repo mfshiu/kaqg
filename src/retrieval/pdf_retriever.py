@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.abspath(".."))
+
 import signal
 import time
 
@@ -232,18 +235,16 @@ class PdfRetriever(Agent):
 
 
 if __name__ == '__main__':
-    main_agent = PdfRetriever(app_helper.get_agent_config())
-    logger.debug(f'***** {main_agent.__class__.__name__} *****')
+    _agent = PdfRetriever(app_helper.get_agent_config())
+    logger.debug(f'***** {_agent.__class__.__name__} *****')
     
-
     def signal_handler(signal, frame):
-        main_agent.terminate()
+        _agent.terminate()
     signal.signal(signal.SIGINT, signal_handler)
 
-
-    main_agent.start_process()
+    _agent.start_process()
 
     time.sleep(1)
-    while main_agent.is_active():
+    while _agent.is_active():
         print('.', end='')
         time.sleep(1)

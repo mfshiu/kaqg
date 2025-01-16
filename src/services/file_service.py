@@ -1,15 +1,18 @@
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 import hashlib
 import mimetypes
-import os
 import random
+import signal
 import time
 import uuid
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel
+import app_helper, log_helper
 
-from logging import Logger
-logger:Logger = __import__('src').get_logger()
+logger = log_helper.get_logger()
 
 
 class FileService(Agent):
@@ -17,11 +20,14 @@ class FileService(Agent):
     
     
     def __init__(self, cfg, storage_root):
+        logger.info(f"FileService.__init__")
         super().__init__('file_service.services.wastepro', cfg)
         self.storage_root = storage_root
 
 
     def on_connected(self):
+        logger = log_helper.get_logger()
+        logger.info(f"subscribe: {FileService.TOPIC_FILE_UPLOAD}")
         self._subscribe(FileService.TOPIC_FILE_UPLOAD, "str", self.handle_file_upload)
 
 
@@ -37,6 +43,7 @@ class FileService(Agent):
     def handle_file_upload(self, topic:str, pcl:BinaryParcel):
         file_info = pcl.content
         logger.verbose(f"topic: {topic}, filename: {file_info.get('filename')}, content size: {len(file_info.get('content'))}")
+        # print(f"topic: {topic}, filename: {file_info.get('filename')}, content size: {len(file_info.get('content'))}")
 
         filename = file_info.get('filename')
         file_id = FileService._generate_file_id(filename)
@@ -60,3 +67,20 @@ class FileService(Agent):
             'encoding': encoding,
             'file_path': file_path,
         }
+
+
+
+if __name__ == '__main__':
+    _agent = FileService(app_helper.get_agent_config(), '_upload')
+    logger.debug(f'***** {_agent.__class__.__name__} *****')
+    
+    def signal_handler(signal, frame):
+        _agent.terminate()
+    signal.signal(signal.SIGINT, signal_handler)
+
+    _agent.start_process()
+
+    time.sleep(1)
+    while _agent.is_active():
+        print('.', end='')
+        time.sleep(1)

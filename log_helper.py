@@ -5,21 +5,8 @@ from pathlib import Path
 import agentflow
 
 
-LOGGING_LEVEL_VERBOSE = int(logging.DEBUG / 2)
-
 LOGGING_LEVEL = logging.DEBUG
-LOGGING_LEVEL = LOGGING_LEVEL_VERBOSE
-
-logging.addLevelName(LOGGING_LEVEL_VERBOSE, "VERBOSE")
-
-
-# Define a helper method for logging at VERBOSE level
-def verbose(self, message, *args, **kwargs):
-    if self.isEnabledFor(LOGGING_LEVEL_VERBOSE):
-        self._log(LOGGING_LEVEL_VERBOSE, message, args, **kwargs, stacklevel=2)
-
-# Add the verbose method to the Logger class
-logging.Logger.verbose = verbose
+LOGGING_LEVEL = agentflow.LOGGING_LEVEL_VERBOSE
 
 
 # 初始化 logging，設置格式和 handler
