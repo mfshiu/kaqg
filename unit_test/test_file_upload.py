@@ -2,6 +2,7 @@ import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import time
+import toml
 import unittest
 
 from agentflow.core.agent import Agent
@@ -13,7 +14,8 @@ from logging import Logger
 logger:Logger = __import__('agentflow').get_logger()
 
 
-config_test = app_helper.get_agent_config()
+with open("./wastepro.toml", "r") as file:
+    config_test = app_helper.get_agent_config(toml.load(file))
 
 
 
@@ -50,11 +52,13 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        storage_root = os.path.join(os.getcwd(), '_upload')
-        if not os.path.exists(storage_root):
-            os.mkdir(storage_root)
-        self.file_agent = FileService(config_test, storage_root)
-        self.file_agent.start()
+        home_directory = os.path.join(os.getcwd(), '_upload')
+        if not os.path.exists(home_directory):
+            os.mkdir(home_directory)
+            
+        # Comment here if FileService is started at another location.
+        # self.file_agent = FileService(config_test, storage_root)
+        # self.file_agent.start()
 
         self.validation_agent = TestAgent.ValidationAgent()
         self.validation_agent.start_thread()

@@ -6,6 +6,7 @@ import mimetypes
 import random
 import signal
 import time
+import toml
 import uuid
 
 from agentflow.core.agent import Agent
@@ -19,10 +20,10 @@ class FileService(Agent):
     TOPIC_FILE_UPLOAD = "FileUpload/FileService/Services"
     
     
-    def __init__(self, cfg, storage_root):
+    def __init__(self, agent_config, home_directory):
         logger.info(f"FileService.__init__")
-        super().__init__('file_service.services.wastepro', cfg)
-        self.storage_root = storage_root
+        super().__init__('file_service.services.wastepro', agent_config)
+        self.home_directory = home_directory
 
 
     def on_connected(self):
@@ -49,7 +50,7 @@ class FileService(Agent):
         file_id = FileService._generate_file_id(filename)
         mime_type, encoding = mimetypes.guess_type(filename)
         
-        file_dir = os.path.join(self.storage_root, file_id[:2])
+        file_dir = os.path.join(self.home_directory, file_id[:2])
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
 
@@ -71,8 +72,13 @@ class FileService(Agent):
 
 
 if __name__ == '__main__':
-    _agent = FileService(app_helper.get_agent_config(), '_upload')
-    logger.debug(f'***** {_agent.__class__.__name__} *****')
+    with open("./wastepro.toml", "r") as file:
+        toml_data = toml.load(file)
+
+    _agent = FileService(
+        agent_config = app_helper.get_agent_config(toml_data), 
+        home_directory = toml_data['service']['file']['home_directory'])
+    logger.info(f'***** {_agent.__class__.__name__} *****')
     
     def signal_handler(signal, frame):
         _agent.terminate()
