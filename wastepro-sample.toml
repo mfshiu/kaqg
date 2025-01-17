@@ -6,10 +6,10 @@ broker_name = "mqtt"
 
 [broker.mqtt]
 broker_type = "mqtt"
-host = "mqtt-vchat.gigoo.co"
+host = "aaa.gigoo.co"
 port = 1883
-username = "entkm"
-password = "Entkm123"
+username = ""
+password = ""
 keepalive = 60
 
 [broker.amqp]
