@@ -88,5 +88,5 @@ if __name__ == '__main__':
 
     time.sleep(1)
     while _agent.is_active():
-        print('.', end='')
+        print('.', end='', flush=True)
         time.sleep(1)
