@@ -1,5 +1,6 @@
 from neo4j import GraphDatabase
-import docker_management
+
+from knowsys import docker_management
 
 
 class KnowledgeGraph:

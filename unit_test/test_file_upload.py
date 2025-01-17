@@ -1,21 +1,21 @@
+# Main program required
 import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+import app_helper
+app_helper.initialize()
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 import time
-import toml
 import unittest
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
-import app_helper, log_helper
 from services.file_service import FileService
 
-from logging import Logger
-logger:Logger = __import__('agentflow').get_logger()
-
-
-with open("./wastepro.toml", "r") as file:
-    config_test = app_helper.get_agent_config(toml.load(file))
+config_test = app_helper.get_agent_config()
+logger.info(f"config_test: {config_test}")
 
 
 
@@ -88,6 +88,4 @@ class TestAgent(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    logger = log_helper.get_logger()
-
     unittest.main()
