@@ -3,7 +3,6 @@ import os
 
 # Logging setting
 import logging 
-from logging import Logger
 from logging.handlers import TimedRotatingFileHandler
 
 LOGGING_LEVEL_VERBOSE = int(logging.DEBUG / 2)
@@ -15,19 +14,25 @@ def verbose(self, message, *args, **kwargs):
 logging.Logger.verbose = verbose
 
 
+_logger:logging.Logger = None
 config = {}
 
 
 def initialize():
+    global _logger
+    if _logger:
+        _logger.warning(f"Initialized.")
+        return
+    
     config_path = get_config_path()
     print(f'Config path: {config_path}')
     if not os.path.isfile(config_path):
         raise FileNotFoundError(f"Configuration file not found at: {config_path}")
-    
+
     global config
     config = __import__('toml').load(config_path)
-    logger:Logger = _init_logging(config)    
-    logger.debug(f'Config: {config}')
+    _logger = _init_logging(config)    
+    _logger.debug(f'Config: {config}')
 
 
 def _init_logging(config):
@@ -43,7 +48,6 @@ def _init_logging(config):
     config['LOGGER_NAME'] = log_name
     config['LOG_PATH'] = log_path
     config['LOG_LEVEL'] = str(log_level)
-    
     
     Path(os.path.dirname(log_path)).mkdir(parents=True, exist_ok=True)
 
