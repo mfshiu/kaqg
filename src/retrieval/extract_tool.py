@@ -1,8 +1,8 @@
 from openai import OpenAI
 import re
 import json
-from transformers import AutoTokenizer, AutoModelForTokenClassification
-from transformers import pipeline
+# from transformers import AutoTokenizer, AutoModelForTokenClassification
+# from transformers import pipeline
 
 api_key = "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"
 

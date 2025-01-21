@@ -1,17 +1,19 @@
-import signal
-import time
+# Main program required
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import app_helper
+app_helper.initialize()
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
-import app_helper
 from services.file_service import FileService
-from services.kg_service import KnowledgeGraphService
-from .extract_tool import *
+from services.kg_service import KnowledgeGraphService, Action
+from retrieval.extract_tool import *
+from retrieval.pdf_tool import PdfImport
 
-from logging import Logger
-
-from src.retrieval.pdf_tool import PdfImport
-logger:Logger = __import__('wastepro').get_logger()
 
 
 class PdfRetriever(Agent):
@@ -31,38 +33,42 @@ class PdfRetriever(Agent):
 
     def _handle_retrieval(self, topic, pcl:BinaryParcel):
         # Upload the file
+        kg_id = pcl.content.get('kg_id', 0)
+        logger.info(f"topic: {topic}, kg_id: {kg_id}")
+        
         pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl)
         file_info = pcl_file.content
-        logger.debug(f"topic: {topic}, filename: {file_info.get('filename')}")
+        logger.info(f"file_info: {file_info}")
         # file_info: {
-        #     'file_id': file_id,
-        #     'filename': filename,
-        #     'mime_type': mime_type,
-        #     'encoding': encoding,
-        #     'file_path': file_path,
-        #     'toc': table_of_content,
+            # 'file_id': file_id,
+            # 'filename': filename,
+            # 'mime_type': mime_type,
+            # 'encoding': encoding,
+            # 'file_path': file_path,
         # }
         
-        kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
+        # kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
         # kg_info: {
         #     'kg_id': kg_id,
         #     'topic_triplets_add': topic_triplets_add,
         # }
+        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_id)
+        logger.verbose(f"topic_triplets_add: {topic_triplets_add}")
         
-        pages = self.read_pages(file_info['file_path'])
-        if 'toc' not in file_info:
-            # Set all pages belong to 'Root' if 
-            file_info['toc'] = [('Root', 0, len(pages), [])]
-        for page_number, page_content in enumerate(pages):
-            sections = self.locate_sections(page_number, file_info['toc'])
-            triplets = self.extract_triplets(page_content, sections)
-            self._publish(kg_info['topic_triplets_add'], {
-                'source_type': 'pdf',
-                'file_id': file_info['file_id'],
-                'page_number': page_number,
-                'triplets': triplets,
-                'kg_id': kg_info['kg_id'],
-            })
+        # pages = self.read_pages(file_info['file_path'])
+        # if 'toc' not in file_info:
+        #     # Set all pages belong to 'Root' if 
+        #     file_info['toc'] = [('Root', 0, len(pages), [])]
+        # for page_number, page_content in enumerate(pages):
+        #     sections = self.locate_sections(page_number, file_info['toc'])
+        #     triplets = self.extract_triplets(page_content, sections)
+        #     self._publish(topic_triplets_add, {
+        #         'source_type': 'pdf',
+        #         'file_id': file_info['file_id'],
+        #         'page_number': page_number,
+        #         'triplets': triplets,
+        #         'kg_id': file_info['kg_id'],
+        #     })
 
         self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
         
@@ -231,19 +237,20 @@ class PdfRetriever(Agent):
 
 
 
-if __name__ == '__main__':
-    main_agent = PdfRetriever(app_helper.get_agent_config())
-    logger.debug(f'***** {main_agent.__class__.__name__} *****')
-    
+import signal
+import time
 
+if __name__ == '__main__':
+    _agent = PdfRetriever(app_helper.get_agent_config())
+    logger.debug(f'***** {_agent.__class__.__name__} *****')
+    
     def signal_handler(signal, frame):
-        main_agent.terminate()
+        _agent.terminate()
     signal.signal(signal.SIGINT, signal_handler)
 
-
-    main_agent.start_process()
+    _agent.start_process()
 
     time.sleep(1)
-    while main_agent.is_active():
-        print('.', end='')
+    while _agent.is_active():
+        print('.', end='', flush=True)
         time.sleep(1)

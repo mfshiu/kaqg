@@ -1,27 +1,34 @@
+# Main program required
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import app_helper
+app_helper.initialize()
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
+
 import hashlib
 import mimetypes
-import os
 import random
-import time
 import uuid
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel
 
-from logging import Logger
-logger:Logger = __import__('src').get_logger()
 
 
 class FileService(Agent):
     TOPIC_FILE_UPLOAD = "FileUpload/FileService/Services"
     
     
-    def __init__(self, cfg, storage_root):
-        super().__init__('file_service.services.wastepro', cfg)
-        self.storage_root = storage_root
+    def __init__(self, agent_config, home_directory):
+        logger.info(f"FileService.__init__")
+        super().__init__('file_service.services.wastepro', agent_config)
+        self.home_directory = home_directory
 
 
     def on_connected(self):
+        logger.info(f"subscribe: {FileService.TOPIC_FILE_UPLOAD}")
         self._subscribe(FileService.TOPIC_FILE_UPLOAD, "str", self.handle_file_upload)
 
 
@@ -37,12 +44,14 @@ class FileService(Agent):
     def handle_file_upload(self, topic:str, pcl:BinaryParcel):
         file_info = pcl.content
         logger.verbose(f"topic: {topic}, filename: {file_info.get('filename')}, content size: {len(file_info.get('content'))}")
+        # print(f"topic: {topic}, filename: {file_info.get('filename')}, content size: {len(file_info.get('content'))}")
 
         filename = file_info.get('filename')
         file_id = FileService._generate_file_id(filename)
         mime_type, encoding = mimetypes.guess_type(filename)
+        logger.debug(f"file_id: {file_id}, filename: {filename}, mime_type: {mime_type}, encoding: {encoding}")
         
-        file_dir = os.path.join(self.storage_root, file_id[:2])
+        file_dir = os.path.join(self.home_directory, file_id[:2])
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
 
@@ -60,3 +69,26 @@ class FileService(Agent):
             'encoding': encoding,
             'file_path': file_path,
         }
+
+
+
+import signal
+import time
+import toml
+
+if __name__ == '__main__':
+    _agent = FileService(
+        agent_config = app_helper.get_agent_config(), 
+        home_directory = app_helper.config['service']['file']['home_directory'])
+    logger.info(f'***** {_agent.__class__.__name__} *****')
+    
+    def signal_handler(signal, frame):
+        _agent.terminate()
+    signal.signal(signal.SIGINT, signal_handler)
+
+    _agent.start_process()
+
+    time.sleep(1)
+    while _agent.is_active():
+        print('.', end='', flush=True)
+        time.sleep(1)

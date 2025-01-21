@@ -2,19 +2,25 @@
 version = 1
 
 [broker]
-broker_type = "mqtt"
-# broker_type = "amqp"
+broker_name = "mqtt"
 
 [broker.mqtt]
-host = "localhost"
-port = 1884
-username = "eric"
-password = "eric123"
+broker_type = "mqtt"
+host = "aaa.gigoo.co"
+port = 1883
+username = ""
+password = ""
 keepalive = 60
 
 [broker.amqp]
+broker_type = "amqp"
 host = "amqp_host"
 port = 5672
 username = "amqp_user"
 password = "amqp_pass"
 heartbeat = 30
+
+[service]
+
+[service.file]
+home_directory = "_upload"

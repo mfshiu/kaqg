@@ -1,6 +1,11 @@
-import sys
-import os
-sys.path.append(os.path.abspath(".."))  # Adjust path if necessary
+# Main program required
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+import app_helper
+app_helper.initialize()
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 import time
 import unittest
@@ -10,12 +15,10 @@ from agentflow.core.parcel import BinaryParcel, Parcel
 from retrieval.pdf_retriever import PdfRetriever
 from services.file_service import FileService
 from services.kg_service import KnowledgeGraphService
-from unit_test.config_test import config_test
 
 
-from logging import Logger
-logger:Logger = __import__('wastepro').get_logger()
-
+config_test = app_helper.get_agent_config()
+logger.info(f"config_test: {config_test}")
 
 
 class TestAgent(unittest.TestCase):
@@ -28,6 +31,8 @@ class TestAgent(unittest.TestCase):
 
 
         def on_connected(self):
+            logger.info("on_connected")
+            
             self._subscribe(PdfRetriever.TOPIC_RETRIEVED)
             
             for filename in ['test_img1.jpg', 'test_img2.jpg', 'test_img3.jpg']:
@@ -36,7 +41,9 @@ class TestAgent(unittest.TestCase):
                     content = file.read()
                 pcl = BinaryParcel({
                     'content': content,
-                    'filename': filename})
+                    'filename': filename,
+                    'kg_id': 0})
+                logger.info("_publish:")
                 self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
 
@@ -48,17 +55,18 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        storage_root = os.path.join(os.getcwd(), '_upload')
-        if not os.path.exists(storage_root):
-            os.mkdir(storage_root)
-        self.file_agent = FileService(config_test, storage_root)
-        self.file_agent.start()
+        # Comment here if related agents is started.
+        # storage_root = os.path.join(os.getcwd(), '_upload')
+        # if not os.path.exists(storage_root):
+        #     os.mkdir(storage_root)
+        # self.file_agent = FileService(config_test, storage_root)
+        # self.file_agent.start()
         
-        self.kgservice = KnowledgeGraphService(config_test)
-        self.kgservice.start()
+        # self.kgservice = KnowledgeGraphService(config_test)
+        # self.kgservice.start()
         
-        self.knowledge_retriever = PdfRetriever(config_test)
-        self.knowledge_retriever.start()
+        # self.knowledge_retriever = PdfRetriever(config_test)
+        # self.knowledge_retriever.start()
 
         self.validation_agent = TestAgent.ValidationAgent()
         self.validation_agent.start_thread()
@@ -90,9 +98,13 @@ class TestAgent(unittest.TestCase):
 
     def tearDown(self):
         self.validation_agent.terminate()
-        self.kgservice.terminate()
-        self.knowledge_retriever.terminate()
-        self.file_agent.terminate()
+        
+        if hasattr(self, 'kgservice'):
+            self.kgservice.terminate()
+        if hasattr(self, 'knowledge_retriever'):
+            self.knowledge_retriever.terminate()
+        if hasattr(self, 'file_agent'):
+            self.file_agent.terminate()
 
 
 

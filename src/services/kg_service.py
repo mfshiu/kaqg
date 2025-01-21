@@ -1,3 +1,5 @@
+from ctypes import ArgumentError
+from enum import Enum, auto, StrEnum
 import hashlib
 import mimetypes
 import os
@@ -8,19 +10,45 @@ from xml.sax import handler
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
-
-from logging import Logger
-
 import knowsys
-logger:Logger = __import__('src').get_logger()
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 
-class KnowledgeGraphService(Agent):
-    TOPIC_TRIPLETS_ADD = "AddTriplets/KGService/Services"
+
+class Action(Enum):
+    def _generate_next_value_(name, start, count, last_values):
+        return name.lower()
+
+    TRIPLETS_ADD = auto()
+    CREATE = auto()
+    QUERY_CONCEPTS = auto()
+    QUERY_FACTS = auto()
+    QUERY_SECTIONS = auto()
+
+
+
+class Topic(StrEnum):
     TOPIC_CREATE = "Create/KGService/Services"
-    TOPIC_QUERY_CONCEPTS = "QueryConcepts/KGService/Services"
-    TOPIC_QUERY_FACTS = "QueryFacts/KGService/Services"
-    TOPIC_QUERY_SECTIONS = "QuerySections/KGService/Services"
+    TOPIC_TRIPLETS_ADD = "AddTriplets/KGService/Services"
+    TOPIC_CONCEPTS_QUERY = "QueryConcepts/KGService/Services"
+    TOPIC_FACTS_QUERY = "QueryFacts/KGService/Services"
+    TOPIC_SECTIONS_QUERY = "QuerySections/KGService/Services"
+    
+    
+    
+class KnowledgeGraphService(Agent):
+    
+    
+    @staticmethod
+    def get_topic(action:Action, kg_id):
+        if action == Action.TRIPLETS_ADD:
+            topic = f'{kg_id}/{Topic.TOPIC_TRIPLETS_ADD.value}'
+        else:
+            raise ValueError(f"Invalid action: {action}")
+        
+        return topic
     
     
     def __init__(self, cfg):
@@ -28,15 +56,15 @@ class KnowledgeGraphService(Agent):
 
 
     def on_connected(self):
-        self._subscribe(KnowledgeGraphService.TOPIC_CREATE, topic_handler=self.handle_create)
-        self._subscribe(KnowledgeGraphService.TOPIC_QUERY_CONCEPTS, topic_handler=self.query_concepts)
-        self._subscribe(KnowledgeGraphService.TOPIC_QUERY_FACTS, topic_handler=self.query_facts)
+        self._subscribe(Topic.TOPIC_CREATE.value, topic_handler=self.handle_create)
+        self._subscribe(Topic.TOPIC_CONCEPTS_QUERY.value, topic_handler=self.query_concepts)
+        self._subscribe(Topic.TOPIC_FACTS_QUERY.value, topic_handler=self.query_facts)
         self._subscribe(KnowledgeGraphService.TOPIC_QUERY_SECTIONS, topic_handler=self.query_sections)
 
 
     def handle_create(self, topic:str, pcl:TextParcel):
         kg_id = 0
-        topic_triplets_add = f'{kg_id}/{KnowledgeGraphService.TOPIC_TRIPLETS_ADD}'
+        topic_triplets_add = KnowledgeGraphService.get_topic('triplets_add', kg_id)
         # Create KG
         self._subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
         

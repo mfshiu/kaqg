@@ -1,6 +1,11 @@
-import sys
-import os
-sys.path.append(os.path.abspath(".."))  # Adjust path if necessary
+# Main program required
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+import app_helper
+app_helper.initialize()
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 import time
 import unittest
@@ -8,11 +13,9 @@ import unittest
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
 from services.file_service import FileService
-from unit_test.config_test import config_test
 
-
-from logging import Logger
-logger:Logger = __import__('wastepro').get_logger()
+config_test = app_helper.get_agent_config()
+logger.info(f"config_test: {config_test}")
 
 
 
@@ -49,11 +52,13 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        storage_root = os.path.join(os.getcwd(), '_upload')
-        if not os.path.exists(storage_root):
-            os.mkdir(storage_root)
-        self.file_agent = FileService(config_test, storage_root)
-        self.file_agent.start()
+        home_directory = os.path.join(os.getcwd(), '_upload')
+        if not os.path.exists(home_directory):
+            os.mkdir(home_directory)
+            
+        # Comment here if FileService is started at another location.
+        # self.file_agent = FileService(config_test, storage_root)
+        # self.file_agent.start()
 
         self.validation_agent = TestAgent.ValidationAgent()
         self.validation_agent.start_thread()
@@ -77,7 +82,8 @@ class TestAgent(unittest.TestCase):
 
     def tearDown(self):
         self.validation_agent.terminate()
-        self.file_agent.terminate()
+        if hasattr(self, 'file_agent'):
+            self.file_agent.terminate()
 
 
 
