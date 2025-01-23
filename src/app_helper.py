@@ -1,5 +1,7 @@
+from datetime import datetime
 from pathlib import Path
 import os
+import time
 
 # Logging setting
 import logging 
@@ -118,6 +120,24 @@ def get_agent_config():
     }
 
     return agent_config
+
+def wait_agent(agent):
+    time.sleep(1)
+    dot_counter = 0
+    minute_tracker = datetime.now().minute
+
+    while agent.is_active():
+        time.sleep(1)
+        
+        dot_counter += 1
+        if dot_counter % 6 == 0:
+            print('.', end='', flush=True)
+
+        current_minute = datetime.now().minute
+        if current_minute != minute_tracker:
+            print(f"{datetime.now().strftime('%H:%M')}", end='', flush=True)
+            minute_tracker = current_minute
+    print()
 
 
 

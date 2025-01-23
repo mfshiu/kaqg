@@ -11,6 +11,7 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 import hashlib
 import mimetypes
 import random
+import time
 import uuid
 
 from agentflow.core.agent import Agent
@@ -74,8 +75,6 @@ class FileService(Agent):
 
 
 import signal
-import time
-from datetime import datetime
 
 if __name__ == '__main__':
     _agent = FileService(
@@ -88,25 +87,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
 
     _agent.start_process()
-
-    time.sleep(1)
-    dot_counter = 0
-    minute_tracker = datetime.now().minute
-
-    while _agent.is_active():
-        time.sleep(1)
-        
-        dot_counter += 1
-        if dot_counter % 6 == 0:
-            print('.', end='', flush=True)
-
-        current_minute = datetime.now().minute
-        if current_minute != minute_tracker:
-            print(f"{datetime.now().strftime('%H:%M')}", end='', flush=True)
-            minute_tracker = current_minute
-    print()
-
-    # time.sleep(1)
-    # while _agent.is_active():
-    #     print('.', end='', flush=True)
-    #     time.sleep(1)
+    
+    app_helper.wait_agent(_agent)
+    

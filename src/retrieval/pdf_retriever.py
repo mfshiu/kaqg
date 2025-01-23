@@ -1,8 +1,9 @@
-# Main program required
+# Required when executed as the main program.
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
-app_helper.initialize()
+app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+###
 
 import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
@@ -238,7 +239,6 @@ class PdfRetriever(Agent):
 
 
 import signal
-import time
 
 if __name__ == '__main__':
     _agent = PdfRetriever(app_helper.get_agent_config())
@@ -250,7 +250,4 @@ if __name__ == '__main__':
 
     _agent.start_process()
 
-    time.sleep(1)
-    while _agent.is_active():
-        print('.', end='', flush=True)
-        time.sleep(1)
+    app_helper.wait_agent(_agent)
