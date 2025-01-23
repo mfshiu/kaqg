@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
         current_minute = datetime.now().minute
         if current_minute != minute_tracker:
-            print(f"\n{datetime.now().strftime('%H:%M')}", end='', flush=True)
+            print(f"{datetime.now().strftime('%H:%M')}", end='', flush=True)
             minute_tracker = current_minute
     print()
             
