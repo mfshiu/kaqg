@@ -74,7 +74,7 @@ class FileService(Agent):
 
 import signal
 import time
-import toml
+from datetime import datetime
 
 if __name__ == '__main__':
     _agent = FileService(
@@ -89,6 +89,22 @@ if __name__ == '__main__':
     _agent.start_process()
 
     time.sleep(1)
+    dot_counter = 0
+    minute_tracker = datetime.now().minute
+
     while _agent.is_active():
-        print('.', end='', flush=True)
         time.sleep(1)
+        
+        dot_counter += 1
+        if dot_counter % 6 == 0:
+            print('.', end='', flush=True)
+
+        current_minute = datetime.now().minute
+        if current_minute != minute_tracker:
+            print(f"\n{datetime.now().strftime('%H:%M')}")
+            minute_tracker = current_minute
+            
+    # time.sleep(1)
+    # while _agent.is_active():
+    #     print('.', end='', flush=True)
+    #     time.sleep(1)
