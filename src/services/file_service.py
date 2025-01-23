@@ -1,8 +1,9 @@
-# Main program required
+# Required when executed as the main program.
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
-app_helper.initialize()
+app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+###
 
 import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
@@ -104,7 +105,7 @@ if __name__ == '__main__':
             print(f"{datetime.now().strftime('%H:%M')}", end='', flush=True)
             minute_tracker = current_minute
     print()
-            
+
     # time.sleep(1)
     # while _agent.is_active():
     #     print('.', end='', flush=True)

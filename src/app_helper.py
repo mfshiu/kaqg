@@ -18,7 +18,7 @@ _logger:logging.Logger = None
 config = {}
 
 
-def initialize():
+def initialize(module_name=None):
     global _logger
     if _logger:
         _logger.warning(f"Initialized.")
@@ -31,6 +31,12 @@ def initialize():
 
     global config
     config = __import__('toml').load(config_path)
+    
+    if module_name:
+        log_path = config['logging']['path']
+        base_name = os.path.splitext(os.path.basename(log_path))[0]
+        config['logging']['path'] = log_path.replace(base_name, f"{base_name}_{module_name}")
+        
     _logger = _init_logging(config)    
     _logger.debug(f'Config: {config}')
 
@@ -76,7 +82,7 @@ def _init_logging(config):
 
     logger.setLevel(log_level)
 
-    logger.info(f"Log name: {logger.name}, level: {logger.level}, path: {log_path}")
+    logger.info(f"Log name: {logger.name}, Level: {logger.level}, Path: {log_path}")
 
     return logger
     
