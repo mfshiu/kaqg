@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 import os
+import signal
 import time
 
 # Logging setting
@@ -121,7 +122,12 @@ def get_agent_config():
 
     return agent_config
 
+
 def wait_agent(agent):
+    def signal_handler(signal, frame):
+        agent.terminate()
+    signal.signal(signal.SIGINT, signal_handler)
+
     time.sleep(1)
     dot_counter = 0
     minute_tracker = datetime.now().minute

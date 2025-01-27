@@ -12,6 +12,7 @@ from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
 from services.file_service import FileService
 from services.kg_service import KnowledgeGraphService, Action
+from retrieval import ensure_size
 from retrieval.extract_tool import *
 from retrieval.pdf_tool import PdfImport
 
@@ -34,8 +35,8 @@ class PdfRetriever(Agent):
 
     def _handle_retrieval(self, topic, pcl:BinaryParcel):
         # Upload the file
-        kg_id = pcl.content.get('kg_id', 0)
-        logger.info(f"topic: {topic}, kg_id: {kg_id}")
+        # kg_id = pcl.content.get('kg_id', 0)
+        logger.info(f"topic: {topic}, pcl: {pcl}")
         
         pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl)
         file_info = pcl_file.content
@@ -53,23 +54,26 @@ class PdfRetriever(Agent):
         #     'kg_id': kg_id,
         #     'topic_triplets_add': topic_triplets_add,
         # }
-        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_id)
+        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, pcl.content.get('kg_id', 0))
         logger.verbose(f"topic_triplets_add: {topic_triplets_add}")
-        
-        # pages = self.read_pages(file_info['file_path'])
-        # if 'toc' not in file_info:
-        #     # Set all pages belong to 'Root' if 
-        #     file_info['toc'] = [('Root', 0, len(pages), [])]
-        # for page_number, page_content in enumerate(pages):
-        #     sections = self.locate_sections(page_number, file_info['toc'])
-        #     triplets = self.extract_triplets(page_content, sections)
-        #     self._publish(topic_triplets_add, {
-        #         'source_type': 'pdf',
-        #         'file_id': file_info['file_id'],
-        #         'page_number': page_number,
-        #         'triplets': triplets,
-        #         'kg_id': file_info['kg_id'],
-        #     })
+
+        pages = self.read_pages(file_info['file_path'])
+
+        if 'toc' not in file_info:
+            # Set all pages belong to 'Root' if 
+            file_info['toc'] = [('Root', 0, len(pages), [])]
+
+        for page_number, page_content in enumerate(pages):
+            logger.verbose(f"{page_number+1}: {ensure_size(page_content, 150)}")
+            # sections = self.locate_sections(page_number, file_info['toc'])
+            # triplets = self.extract_triplets(page_content, sections)
+            # self._publish(topic_triplets_add, {
+            #     'source_type': 'pdf',
+            #     'file_id': file_info['file_id'],
+            #     'page_number': page_number,
+            #     'triplets': triplets,
+            #     'kg_id': file_info['kg_id'],
+            # })
 
         self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
         
@@ -125,10 +129,9 @@ class PdfRetriever(Agent):
         return sections
 
 
-    # TODO: Implement this method
     def read_pages(self, file_path) -> list[str]:
         """
-        Reads a PDF file from the given file path into a list.
+        Reads a PDF file from the given file into a list.
         
         Args:
             file_path (str): The absolute file path.
@@ -137,9 +140,7 @@ class PdfRetriever(Agent):
         """
         
         pdf_import = PdfImport(file_path)
-        return pdf_import.extract_text()
-        
-        
+        return pdf_import.extract_pages()
         # Example of return.
         # return [
         #     '104 年全國各縣市焚化底渣產量約占焚化量之 15%。',
@@ -238,16 +239,7 @@ class PdfRetriever(Agent):
 
 
 
-import signal
-
 if __name__ == '__main__':
-    _agent = PdfRetriever(app_helper.get_agent_config())
-    logger.debug(f'***** {_agent.__class__.__name__} *****')
-    
-    def signal_handler(signal, frame):
-        _agent.terminate()
-    signal.signal(signal.SIGINT, signal_handler)
-
-    _agent.start_process()
-
-    app_helper.wait_agent(_agent)
+    agent = PdfRetriever(app_helper.get_agent_config())
+    agent.start_process()
+    app_helper.wait_agent(agent)

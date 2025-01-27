@@ -43,7 +43,6 @@ class TestAgent(unittest.TestCase):
                     'content': content,
                     'filename': filename,
                     'kg_id': 0})
-                logger.info("_publish:")
                 self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
 
