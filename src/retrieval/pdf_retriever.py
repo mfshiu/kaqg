@@ -13,7 +13,8 @@ from agentflow.core.parcel import BinaryParcel, Parcel
 from services.file_service import FileService
 from services.kg_service import KnowledgeGraphService, Action
 from retrieval import ensure_size
-from retrieval.extract_tool import *
+# import retrieval.extract_tool as et
+from retrieval.extract_tool import FactConceptExtractor, SectionPairer
 from retrieval.pdf_tool import PdfImport
 
 
@@ -59,14 +60,16 @@ class PdfRetriever(Agent):
 
         pages = self.read_pages(file_info['file_path'])
 
-        if 'toc' not in file_info:
+        if not 'toc' in file_info:
             # Set all pages belong to 'Root' if 
-            file_info['toc'] = [('Root', 0, len(pages), [])]
+            file_info['toc'] = [('Omnichapter', 0, len(pages), [])]
 
         for page_number, page_content in enumerate(pages):
             logger.verbose(f"{page_number+1}: {ensure_size(page_content, 150)}")
-            # sections = self.locate_sections(page_number, file_info['toc'])
-            # triplets = self.extract_triplets(page_content, sections)
+            sections = self.locate_sections(page_number, file_info['toc'])
+            logger.verbose(f"sections: {sections}")
+            triplets = self.extract_triplets(page_content, sections)
+            logger.verbose(f"triplets: {triplets}")
             # self._publish(topic_triplets_add, {
             #     'source_type': 'pdf',
             #     'file_id': file_info['file_id'],
@@ -149,7 +152,6 @@ class PdfRetriever(Agent):
         # ]
 
 
-    # TODO: Implement this method
     def extract_triplets(self, page_content, sections) -> list[tuple[dict, dict, dict]]:
         """
         Convert the page content into triplets. The triplets should contain below types of relationships:
@@ -177,7 +179,7 @@ class PdfRetriever(Agent):
                 'name': '申請書',
                 'aliases': ['application form','formulario de solicitud'],
                 }
-            
+
             Example of a relation dict:
             relation = {
                 'name': 'contain',
@@ -217,19 +219,20 @@ class PdfRetriever(Agent):
             {'name': '委外再利用'}, 
             {'type': 'fact', 'name': '焚化廠底渣', 'aliases': ['incineration plant bottom ash']}),
         ]
-        """  
+        """
 
+        extractor = FactConceptExtractor()
         # extract facts and concepts in LLM
-        factes, concepts, entity_hierarchy = get_concept_n_fact(chat, page_content)
+        factes, concepts, entity_hierarchy = extractor.get_concept_n_fact(page_content)
         # extract fact-relationship-fact in LLM
-        facts_pairs = get_facts_pairs(factes, page_content)
+        facts_pairs = extractor.get_facts_pairs(factes, page_content)
         # get aliases and save as dict in LLM
         aliases_keys = factes + concepts
-        aliases_table = get_aliases(chat, aliases_keys)
+        aliases_table = extractor.get_aliases(aliases_keys)
 
         # start to generate triplets
         pairer = SectionPairer()
-        pairer.pair_sections_with_facts(sections, entity_hierarchy, aliases_table)
+        pairer.pair_concepts_with_facts(sections, entity_hierarchy, aliases_table)
         pairer.pair_sections_with_concepts(sections, concepts, aliases_table)
         pairer.pair_lower_to_higher_sections(sections)
         pairer.pair_facts_and_facts(facts_pairs)

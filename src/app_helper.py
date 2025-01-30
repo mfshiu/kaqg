@@ -67,7 +67,7 @@ def _init_logging(config):
     file_formatter = logging.Formatter(fmt, datefmt)
     
     # File handler
-    file_handler = TimedRotatingFileHandler(log_path, when="d")
+    file_handler = TimedRotatingFileHandler(log_path, when="d", encoding="utf-8")
     file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
