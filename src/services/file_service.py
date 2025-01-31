@@ -77,16 +77,9 @@ class FileService(Agent):
 import signal
 
 if __name__ == '__main__':
-    _agent = FileService(
+    agent = FileService(
         agent_config = app_helper.get_agent_config(), 
         home_directory = app_helper.config['service']['file']['home_directory'])
-    logger.info(f'***** {_agent.__class__.__name__} *****')
-    
-    def signal_handler(signal, frame):
-        _agent.terminate()
-    signal.signal(signal.SIGINT, signal_handler)
-
-    _agent.start_process()
-    
-    app_helper.wait_agent(_agent)
+    agent.start_process()
+    app_helper.wait_agent(agent)
     

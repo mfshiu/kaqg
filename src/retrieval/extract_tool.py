@@ -56,7 +56,7 @@ class GptChatNoStream:
 
 class FactConceptExtractor:
     def __init__(self):
-        self.chat = GptChat(api_key=app_helper.config['service']['llm']['chatgpt_api_key'])
+        self.chat = GptChat(api_key=app_helper.config['service']['llm']['openai_api_key'])
         
         
     def get_concept_n_fact(self, context):
@@ -240,7 +240,7 @@ class SectionPairer:
 
 if __name__ == "__main__":
     start_time = time.time()
-    # chat = GptChat(api_key=app_helper.config['service']['llm']['chatgpt_api_key'])
+    # chat = GptChat(api_key=app_helper.config['service']['llm']['openai_api_key'])
     # chat = GptChatNoStream()
 
     sections = ['chapter1', 'ch1-1', 'ch1-1-1']

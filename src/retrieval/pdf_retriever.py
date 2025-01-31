@@ -69,7 +69,7 @@ class PdfRetriever(Agent):
             sections = self.locate_sections(page_number, file_info['toc'])
             logger.verbose(f"sections: {sections}")
             triplets = self.extract_triplets(page_content, sections)
-            logger.verbose(f"triplets: {triplets}")
+            logger.verbose(f"triplets: {triplets[:5]}..")
             # self._publish(topic_triplets_add, {
             #     'source_type': 'pdf',
             #     'file_id': file_info['file_id'],
