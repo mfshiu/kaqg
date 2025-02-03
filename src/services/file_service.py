@@ -1,8 +1,9 @@
-# Main program required
+# Required when executed as the main program.
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
-app_helper.initialize()
+app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+###
 
 import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
@@ -10,6 +11,7 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 import hashlib
 import mimetypes
 import random
+import time
 import uuid
 
 from agentflow.core.agent import Agent
@@ -73,22 +75,11 @@ class FileService(Agent):
 
 
 import signal
-import time
-import toml
 
 if __name__ == '__main__':
-    _agent = FileService(
+    agent = FileService(
         agent_config = app_helper.get_agent_config(), 
         home_directory = app_helper.config['service']['file']['home_directory'])
-    logger.info(f'***** {_agent.__class__.__name__} *****')
+    agent.start_process()
+    app_helper.wait_agent(agent)
     
-    def signal_handler(signal, frame):
-        _agent.terminate()
-    signal.signal(signal.SIGINT, signal_handler)
-
-    _agent.start_process()
-
-    time.sleep(1)
-    while _agent.is_active():
-        print('.', end='', flush=True)
-        time.sleep(1)

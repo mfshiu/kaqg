@@ -1,6 +1,11 @@
 [system]
 version = 1
 
+[logging]
+name = "wastepro"
+path = "_log/wastepro.log"
+level = "INFO"  # VERBOSE, DEBUG, INFO, WARNING, ERROR
+
 [broker]
 broker_name = "mqtt"
 

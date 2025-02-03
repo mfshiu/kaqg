@@ -1,5 +1,8 @@
+from datetime import datetime
 from pathlib import Path
 import os
+import signal
+import time
 
 # Logging setting
 import logging 
@@ -18,7 +21,7 @@ _logger:logging.Logger = None
 config = {}
 
 
-def initialize():
+def initialize(module_name=None):
     global _logger
     if _logger:
         _logger.warning(f"Initialized.")
@@ -31,6 +34,12 @@ def initialize():
 
     global config
     config = __import__('toml').load(config_path)
+    
+    if module_name:
+        log_path = config['logging']['path']
+        base_name = os.path.splitext(os.path.basename(log_path))[0]
+        config['logging']['path'] = log_path.replace(base_name, f"{base_name}_{module_name}")
+        
     _logger = _init_logging(config)    
     _logger.debug(f'Config: {config}')
 
@@ -58,7 +67,7 @@ def _init_logging(config):
     file_formatter = logging.Formatter(fmt, datefmt)
     
     # File handler
-    file_handler = TimedRotatingFileHandler(log_path, when="d")
+    file_handler = TimedRotatingFileHandler(log_path, when="d", encoding="utf-8")
     file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
@@ -76,7 +85,7 @@ def _init_logging(config):
 
     logger.setLevel(log_level)
 
-    logger.info(f"Log name: {logger.name}, level: {logger.level}, path: {log_path}")
+    logger.info(f"Log name: {logger.name}, Level: {logger.level}, Path: {log_path}")
 
     return logger
     
@@ -112,6 +121,29 @@ def get_agent_config():
     }
 
     return agent_config
+
+
+def wait_agent(agent):
+    def signal_handler(signal, frame):
+        agent.terminate()
+    signal.signal(signal.SIGINT, signal_handler)
+
+    time.sleep(1)
+    dot_counter = 0
+    minute_tracker = datetime.now().minute
+
+    while agent.is_active():
+        time.sleep(1)
+        
+        dot_counter += 1
+        if dot_counter % 6 == 0:
+            print('.', end='', flush=True)
+
+        current_minute = datetime.now().minute
+        if current_minute != minute_tracker:
+            print(f"{datetime.now().strftime('%H:%M')}", end='', flush=True)
+            minute_tracker = current_minute
+    print()
 
 
 
