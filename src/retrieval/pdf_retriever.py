@@ -9,9 +9,10 @@ import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import BinaryParcel, Parcel
+from agentflow.core.parcel import BinaryParcel, Parcel, TextParcel
 from services.file_service import FileService
 from services.kg_service import KnowledgeGraphService, Action
+from services.llm_service import LlmService
 from retrieval import ensure_size
 # import retrieval.extract_tool as et
 from retrieval.extract_tool import FactConceptExtractor, SectionPairer
@@ -36,8 +37,8 @@ class PdfRetriever(Agent):
 
     def _handle_retrieval(self, topic, pcl:BinaryParcel):
         # Upload the file
-        # kg_id = pcl.content.get('kg_id', 0)
-        logger.info(f"topic: {topic}, pcl: {pcl}")
+        kg_id = pcl.content.get('kg_id', 0)
+        # logger.info(f"topic: {topic}, pcl: {pcl}")
         
         pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl)
         file_info = pcl_file.content
@@ -55,7 +56,7 @@ class PdfRetriever(Agent):
         #     'kg_id': kg_id,
         #     'topic_triplets_add': topic_triplets_add,
         # }
-        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, pcl.content.get('kg_id', 0))
+        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_id)
         logger.verbose(f"topic_triplets_add: {topic_triplets_add}")
 
         pages = self.read_pages(file_info['file_path'])
@@ -65,18 +66,18 @@ class PdfRetriever(Agent):
             file_info['toc'] = [('Omnichapter', 0, len(pages), [])]
 
         for page_number, page_content in enumerate(pages):
-            logger.verbose(f"{page_number+1}: {ensure_size(page_content, 150)}")
+            logger.info(f"{page_number+1}: {ensure_size(page_content, 150)}")
             sections = self.locate_sections(page_number, file_info['toc'])
-            logger.verbose(f"sections: {sections}")
+            logger.info(f"sections: {sections}")
             triplets = self.extract_triplets(page_content, sections)
-            logger.verbose(f"triplets: {triplets[:5]}..")
-            # self._publish(topic_triplets_add, {
-            #     'source_type': 'pdf',
-            #     'file_id': file_info['file_id'],
-            #     'page_number': page_number,
-            #     'triplets': triplets,
-            #     'kg_id': file_info['kg_id'],
-            # })
+            logger.info(f"triplets: {triplets[:5]}..")
+            self._publish(topic_triplets_add, {
+                'source_type': 'pdf',
+                'file_id': file_info['file_id'],
+                'page_number': page_number,
+                'triplets': triplets,
+                'kg_id': kg_id,
+            })
 
         self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
         
@@ -221,14 +222,23 @@ class PdfRetriever(Agent):
         ]
         """
 
-        extractor = FactConceptExtractor()
+        extractor = FactConceptExtractor(PdfRetriever.LlmChat(self))
+        
         # extract facts and concepts in LLM
+        logger.info("Start to extract facts and concepts in LLM..")
         factes, concepts, entity_hierarchy = extractor.get_concept_n_fact(page_content)
+        logger.debug(f"\nfactes: {factes[:5]}..\nconcepts: {concepts[:5]}..\nentity_hierarchy: {entity_hierarchy}")
+        
         # extract fact-relationship-fact in LLM
+        logger.info("Start to extract fact-relationship-fact in LLM..")
         facts_pairs = extractor.get_facts_pairs(factes, page_content)
+        logger.debug(f"facts_pairs: {facts_pairs[:5]}..")
+        
         # get aliases and save as dict in LLM
         aliases_keys = factes + concepts
+        logger.info("Start to get aliases in LLM..")
         aliases_table = extractor.get_aliases(aliases_keys)
+        logger.debug(f"aliases_table: {aliases_table}")
 
         # start to generate triplets
         pairer = SectionPairer()
@@ -239,6 +249,21 @@ class PdfRetriever(Agent):
 
         triplets = pairer.get_results()
         return triplets
+
+
+
+    class LlmChat:
+        def __init__(self, agent:Agent):
+            self.agent = agent
+
+
+        def __call__(self, message:str):
+            pcl = TextParcel({'prompt': message})
+            logger.debug(f"pcl: {pcl}")
+            
+            chat_response = self.agent._publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
+            # logger.debug(f"chat_response: {chat_response}")
+            return chat_response.content['response']
 
 
 

@@ -1,4 +1,5 @@
 # Required when executed as the main program.
+import re
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
@@ -64,13 +65,16 @@ class FileService(Agent):
             fp.write(content)
         logger.info(f"filename: {filename} is saved.")
 
-        return {
+        result = {k: v for k, v in pcl.content.items() if k != 'content'}
+        result.update({
             'file_id': file_id,
             'filename': filename,
             'mime_type': mime_type,
             'encoding': encoding,
             'file_path': file_path,
-        }
+        })
+        logger.info(f"result: {result}")
+        return result
 
 
 

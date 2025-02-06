@@ -1,3 +1,4 @@
+import http
 import docker
 import os
 import socket
@@ -18,18 +19,19 @@ class DockerManager:
     """
     HTTP_PORT = 0
     BOLT_PORT = 0
-    def __init__(self):
+    def __init__(self, hostname='localhost', datapath=None):
+        self.datapath = datapath if datapath else os.path.join(os.getcwd(), "src/knowsys/data")
+        self.hostname = hostname
         self.client = docker.from_env()
         self.image = "neo4j:community"
-        self.datapath = os.path.join(os.getcwd(),"src/knowsys/data")
+        self.volumns  = self.datapath
         self.detach = True
-        self.volumns  = os.path.join(os.getcwd(),"src/knowsys/data")
 
 
     # 檢查端口是否已被占用
     def is_port_in_use(self,port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('localhost', port)) == 0
+            return s.connect_ex((self.hostname, port)) == 0
 
 
     # 獲取空閒端口
@@ -43,7 +45,7 @@ class DockerManager:
     def wait_for_KG(self, http_port, timeout=500):
         """檢查 Neo4j 是否在 7474 端口上啟動，最多等待 timeout 秒"""
 
-        url = f"http://localhost:{http_port}"
+        url = f"http://{self.hostname}:{http_port}"
         start_time = time.time()
 
         while time.time() - start_time < timeout:
@@ -64,7 +66,7 @@ class DockerManager:
         return False
     
     
-    def create_container(self,kgName):
+    def create_container(self, kgName):
         """
         建立一個新的 Docker 容器。
         
@@ -82,33 +84,36 @@ class DockerManager:
             container = self.client.containers.run(
                 image=self.image,
                 name=kgName,
-                ports={
+                ports = {
                     '7474/tcp': self.HTTP_PORT,  # 對應的port映射
                     '7687/tcp': self.BOLT_PORT
                 },
-                environment={
-                'NEO4J_AUTH': 'none',  # 設定環境變量，禁用 Neo4j 認證
-                'NEO4JLABS_PLUGINS': '["apoc"]',  # Enable APOC plugin
-                'dbms.security.procedures.unrestricted': 'apoc.*',  # Grant access to APOC procedures
-                'apoc.export.file.enabled': 'true'  # Allow file export for APOC
+                environment = {
+                    'NEO4J_AUTH': 'none',  # 設定環境變量，禁用 Neo4j 認證
+                    'NEO4JLABS_PLUGINS': '["apoc"]',  # Enable APOC plugin
+                    'dbms.security.procedures.unrestricted': 'apoc.*',  # Grant access to APOC procedures
+                    'apoc.export.file.enabled': 'true'  # Allow file export for APOC
                 },
-                volumes={
+                volumes = {
                     # 對應的卷映射
-                    f"{os.path.join(self.datapath,'neo4j_KGs')}/{kgName}": {'bind': '/data', 'mode': 'rw'}
+                    f"{os.path.join(self.datapath, 'neo4j_KGs')}/{kgName}": {'bind': '/data', 'mode': 'rw'}
                 },
                 detach=self.detach
             )
 
             self.wait_for_KG(self.HTTP_PORT, timeout=180)
-            print(f"Container {container.name} created and running.HTTP at: http://localhost:{self.HTTP_PORT} ,BOLT at: bolt://localhost:{self.BOLT_PORT}")
-            #print(container.ports)
-            return [f"http://localhost:{self.HTTP_PORT}",f"bolt://localhost:{self.BOLT_PORT}"]
+            print(f"Container {container.name} created and running.HTTP at: http://{self.hostname}:{self.HTTP_PORT} ,BOLT at: bolt://{self.hostname}:{self.BOLT_PORT}")
+            
+            http_url = f"http://{self.hostname}:{self.HTTP_PORT}"
+            bolt_url = f"bolt://{self.hostname}:{self.BOLT_PORT}"
+            return http_url, bolt_url
+
         except docker.errors.APIError as e:
             print(f"Error creating container: {e}")
             return None
-          
-          
-    def open_KG(self,kgName):
+
+
+    def open_KG(self, kgName):
         """
         開啟或建立指定名稱的neo4j KG(Container).
 
@@ -173,10 +178,33 @@ class DockerManager:
         :return: 容器列表
         """
         directories = []
-        items = os.listdir(os.path.join(self.datapath,'neo4j_KGs'))
+        kgs_dir = os.path.join(self.datapath, 'neo4j_KGs')
+        os.makedirs(kgs_dir, exist_ok=True)
+        items = os.listdir(kgs_dir)
         # 過濾出資料夾
-        directories = [item for item in items if os.path.isdir(os.path.join(os.path.join(self.datapath, 'neo4j_KGs'),item))]
+        directories = [item for item in items if os.path.isdir(os.path.join(os.path.join(self.datapath, 'neo4j_KGs'), item))]
         return directories
+
+
+    def list_running_KGs(self):
+        """
+        回傳所有正在運行且映射 7474/tcp 端口的 KG 容器名稱及其對應的端口資訊。
+
+        :return: list of tuples, 每個元素包含 (容器名稱, HTTP端口, BOLT端口)
+        """
+        running_kgs = []
+        containers = self.client.containers.list()  # 只列出運行中的容器
+
+        for container in containers:
+            ports = container.attrs['NetworkSettings']['Ports']
+            
+            # 確保 7474/tcp 存在於映射端口中
+            if '7474/tcp' in ports and ports['7474/tcp']:
+                http_port = ports['7474/tcp'][0].get('HostPort', 'N/A')
+                bolt_port = ports.get('7687/tcp', [{}])[0].get('HostPort', 'N/A')
+                running_kgs.append((container.name, http_port, bolt_port))
+
+        return running_kgs
     
     
     def stop_all(self):

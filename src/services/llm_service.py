@@ -1,4 +1,5 @@
 # Required when executed as the main program.
+from logging import config
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
@@ -33,6 +34,12 @@ class LlmService(Agent):
     _default_llm_params = {
         'llm': LlmModel.ChatGPT,
     }
+    
+    
+    def __init__(self, agent_config):
+        logger.debug(f"{LlmService.__name__}.{self.__init__.__name__}")
+        super().__init__(LlmService.SERVICE_NAME, agent_config)
+        self.llm_params = agent_config.get('llm')
 
 
     @staticmethod
@@ -51,12 +58,6 @@ class LlmService(Agent):
             llm = ChatLLM(params)
         
         return llm
-    
-    
-    def __init__(self, agent_config, llm_params=None):
-        logger.debug(f"{LlmService.__name__}.{self.__init__.__name__}")
-        super().__init__(LlmService.SERVICE_NAME, agent_config)
-        self.llm_params = llm_params
 
 
     def on_activate(self):
@@ -83,7 +84,7 @@ class LlmService(Agent):
 if __name__ == '__main__':
     class ValidationAgent(Agent):
         def __init__(self):
-            super().__init__(name='main', agent_config=app_helper.get_agent_config())
+            super().__init__(name='validation', agent_config=app_helper.get_agent_config())
 
 
         def on_connected(self):
@@ -113,7 +114,9 @@ if __name__ == '__main__':
         # 'prompt': "Say the prompt message is empty!",
         'openai_api_key': app_helper.config['service']['llm']['openai_api_key'],
     }
-    llm_agent = LlmService(app_helper.get_agent_config(), llm_param)
+    config = app_helper.get_agent_config()
+    config['llm'] = llm_param
+    llm_agent = LlmService(config)
     llm_agent.start_process()
 
     if "-test" in sys.argv:

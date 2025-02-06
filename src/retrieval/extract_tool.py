@@ -55,10 +55,10 @@ class GptChatNoStream:
     
 
 class FactConceptExtractor:
-    def __init__(self):
-        self.chat = GptChat(api_key=app_helper.config['service']['llm']['openai_api_key'])
-        
-        
+    def __init__(self, chat=None):
+        self.chat = chat if chat else GptChat(api_key=app_helper.config['service']['llm']['openai_api_key'])
+
+
     def get_concept_n_fact(self, context):
         query_concept_and_fact =f'''
     Please structure the following context into triplets. The context will be divided into two levels: fact and concept. A fact refers to all entities that can be found in the context, while a concept refers to the higher-level categories of those facts.
