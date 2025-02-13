@@ -35,7 +35,7 @@ class ExecutionAgent(Agent):
         self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
 
-    def on_connected(self):
+    def on_active(self):
         print(self.M("Broker is connected."))
 
         time.sleep(.5)
