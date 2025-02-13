@@ -19,7 +19,7 @@ logger.info(f"config_test: {config_test}")
 
 class TestDockerManagement(unittest.TestCase):
     def setUp(self):
-        datapath = os.path.join(os.getcwd(), "unit_test/_temp")
+        datapath = os.path.join(os.getcwd(), "unit_test", "_temp")
         self.docker_manager = DockerManager(datapath=datapath)
         self.kg_name = 'test_kg'
 

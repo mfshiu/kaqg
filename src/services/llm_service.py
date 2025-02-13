@@ -70,7 +70,7 @@ class LlmService(Agent):
 
     def handle_prompt(self, topic:str, pcl:TextParcel):
         prompt_info = pcl.content
-        logger.debug(f"prompt_info: {prompt_info}")
+        logger.verbose(f"prompt_info: {prompt_info}")
 
         response = self.llm.generate_response(prompt_info.get('prompt'))
         logger.debug(self.M(response))
@@ -107,15 +107,8 @@ if __name__ == '__main__':
             llm_agent.terminate()
 
 
-    llm_param = {
-        # 'model': 'gpt-4o-mini',
-        # 'temperature': 0,
-        # 'streaming': True,
-        # 'prompt': "Say the prompt message is empty!",
-        'openai_api_key': app_helper.config['service']['llm']['openai_api_key'],
-    }
     config = app_helper.get_agent_config()
-    config['llm'] = llm_param
+    config['llm'] = app_helper.config['service']['llm']
     llm_agent = LlmService(config)
     llm_agent.start_process()
 

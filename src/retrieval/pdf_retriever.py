@@ -37,10 +37,10 @@ class PdfRetriever(Agent):
 
     def _handle_retrieval(self, topic, pcl:BinaryParcel):
         # Upload the file
-        kg_id = pcl.content.get('kg_id', 0)
+        kg_name = pcl.content.get('kg_name', 0)
         # logger.info(f"topic: {topic}, pcl: {pcl}")
         
-        pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl)
+        pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl, timeout=40)
         file_info = pcl_file.content
         logger.info(f"file_info: {file_info}")
         # file_info: {
@@ -53,10 +53,10 @@ class PdfRetriever(Agent):
         
         # kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
         # kg_info: {
-        #     'kg_id': kg_id,
+        #     'kg_name': kg_name,
         #     'topic_triplets_add': topic_triplets_add,
         # }
-        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_id)
+        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_name)
         logger.verbose(f"topic_triplets_add: {topic_triplets_add}")
 
         pages = self.read_pages(file_info['file_path'])
@@ -74,9 +74,9 @@ class PdfRetriever(Agent):
             self._publish(topic_triplets_add, {
                 'source_type': 'pdf',
                 'file_id': file_info['file_id'],
-                'page_number': page_number,
+                'page_number': page_number+1,
+                'kg_name': kg_name,
                 'triplets': triplets,
-                'kg_id': kg_id,
             })
 
         self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
@@ -259,7 +259,7 @@ class PdfRetriever(Agent):
 
         def __call__(self, message:str):
             pcl = TextParcel({'prompt': message})
-            logger.debug(f"pcl: {pcl}")
+            logger.verbose(f"pcl: {pcl}")
             
             chat_response = self.agent._publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
             # logger.debug(f"chat_response: {chat_response}")

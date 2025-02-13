@@ -162,6 +162,7 @@ cython_debug/
 #.idea/
 
 _bak/
+_docker/
 _log/
 _output/
 _temp/

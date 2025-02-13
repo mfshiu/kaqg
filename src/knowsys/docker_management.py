@@ -17,10 +17,9 @@ class DockerManager:
     :param detach: 是否在後台運行容器 (預設為 True)
     :return: Docker 回傳DokerManager instance
     """
-    HTTP_PORT = 0
-    BOLT_PORT = 0
     def __init__(self, hostname='localhost', datapath=None):
         self.datapath = datapath if datapath else os.path.join(os.getcwd(), "src/knowsys/data")
+        print(f"datapath: {self.datapath}")
         self.hostname = hostname
         self.client = docker.from_env()
         self.image = "neo4j:community"
@@ -66,6 +65,33 @@ class DockerManager:
         return False
     
     
+    def get_ports(self, kgName):
+        """
+        取得指定 KG 容器的 HTTP 和 BOLT 端口
+        
+        :param kgName: 容器名稱
+        :return: tuple, 包含 HTTP 和 BOLT 端口 (http_port, bolt_port)
+        """
+        running_kgs = self.list_running_KGs()
+        for container_name, http_port, bolt_port in running_kgs:
+            if container_name == kgName:
+                return http_port, bolt_port
+        return None, None  # KG 未運行
+
+
+    def get_urls(self, kgName):
+        """
+        取得指定 KG 容器的 HTTP 和 BOLT URL
+        
+        :param kgName: 容器名稱
+        :return: tuple, 包含 HTTP 和 BOLT URL
+        """
+        http_port, bolt_port = self.get_ports(kgName)
+        if http_port and bolt_port:
+            return f"http://{self.hostname}:{http_port}", f"bolt://{self.hostname}:{bolt_port}"
+        return None, None  # KG 未運行
+    
+    
     def create_container(self, kgName):
         """
         建立一個新的 Docker 容器。
@@ -78,15 +104,23 @@ class DockerManager:
         :return: Docker 容器對象
         """
         print(f"Creating new container for {kgName}...")
-        self.HTTP_PORT = self.get_free_port(7474)
-        self.BOLT_PORT = self.get_free_port(7687)
+        http_port = self.get_free_port(7474)
+        bolt_port = self.get_free_port(7687)
+
+        # Ensure the path is absolute and normalized
+        kg_path = os.path.join(self.datapath, 'neo4j_KGs', kgName)
+        kg_path = os.path.normpath(kg_path)  # Normalize the path to use correct separators
+        kg_path = os.path.abspath(kg_path)  # Convert to absolute path
+        # Docker on Windows might need paths to use forward slashes
+        kg_path = kg_path.replace('\\', '/')  # Replace backslashes with forward slashes if needed
+
         try:
             container = self.client.containers.run(
                 image=self.image,
                 name=kgName,
                 ports = {
-                    '7474/tcp': self.HTTP_PORT,  # 對應的port映射
-                    '7687/tcp': self.BOLT_PORT
+                    '7474/tcp': http_port,  # 對應的port映射
+                    '7687/tcp': bolt_port
                 },
                 environment = {
                     'NEO4J_AUTH': 'none',  # 設定環境變量，禁用 Neo4j 認證
@@ -94,37 +128,46 @@ class DockerManager:
                     'dbms.security.procedures.unrestricted': 'apoc.*',  # Grant access to APOC procedures
                     'apoc.export.file.enabled': 'true'  # Allow file export for APOC
                 },
-                volumes = {
-                    # 對應的卷映射
-                    f"{os.path.join(self.datapath, 'neo4j_KGs')}/{kgName}": {'bind': '/data', 'mode': 'rw'}
+                volumes={
+                    f"{kg_path}": {'bind': '/data', 'mode': 'rw'}
                 },
                 detach=self.detach
             )
 
-            self.wait_for_KG(self.HTTP_PORT, timeout=180)
-            print(f"Container {container.name} created and running.HTTP at: http://{self.hostname}:{self.HTTP_PORT} ,BOLT at: bolt://{self.hostname}:{self.BOLT_PORT}")
+            self.wait_for_KG(http_port, timeout=180)
+            print(f"Container {container.name} created and running.HTTP at: http://{self.hostname}:{http_port}, BOLT at: bolt://{self.hostname}:{bolt_port}")
             
-            http_url = f"http://{self.hostname}:{self.HTTP_PORT}"
-            bolt_url = f"bolt://{self.hostname}:{self.BOLT_PORT}"
+            http_url = f"http://{self.hostname}:{http_port}"
+            bolt_url = f"bolt://{self.hostname}:{bolt_port}"
             return http_url, bolt_url
 
         except docker.errors.APIError as e:
             print(f"Error creating container: {e}")
-            return None
+            return None, None
 
 
     def open_KG(self, kgName):
         """
         開啟或建立指定名稱的neo4j KG(Container).
-
+        若 KG 已在運行，則直接返回現有的 HTTP 和 BOLT 端口，不重新啟動。
+        
         :param kgName: 欲開啟/建立的KG名稱.
-        :return: list[int]:
-            ports[0] neo4j http端口.
-            ports[1] neo4j bolt端口.
+        :return: tuple:
+            (http_url, bolt_url)
         """
-        print("Opening KG instance...")
-        if kgName in self.list_containers()[1]:
-            self.stop_KG(kgName)
+        print(f"Checking if KG '{kgName}' is already running...")
+
+        # 取得所有正在運行的 KG
+        running_kgs = self.list_running_KGs()
+
+        # 檢查 KG 是否已在運行
+        for container_name, http_port, bolt_port in running_kgs:
+            if container_name == kgName:
+                print(f"KG '{kgName}' is already running. HTTP at: http://{self.hostname}:{http_port}, BOLT at: bolt://{self.hostname}:{bolt_port}")
+                return f"http://{self.hostname}:{http_port}", f"bolt://{self.hostname}:{bolt_port}"
+
+        # 若 KG 尚未運行，則創建它
+        print(f"KG '{kgName}' is not running. Creating a new container...")
         return self.create_container(kgName)
 
         
@@ -147,8 +190,10 @@ class DockerManager:
             for volumn in volume_names:
                 self.client.volumes.get(volumn).remove()
             print(f"Container {kgName} stopped.")
+            
         except docker.errors.NotFound:
             print(f"無運作中{kgName}的Container")
+            
         except docker.errors.APIError as e:
             print(f"Error stopping container: {e}")
 
@@ -237,4 +282,3 @@ class DockerManager:
         self.stop_all()
         for kgName in self.list_KGs():
             self.delete_KG(kgName)
-

@@ -224,13 +224,17 @@ class SectionPairer:
     
     def pair_facts_and_facts(self, facts_pair):
         for pair in facts_pair:
-            fact1 = pair[0]
-            relatioship = pair[1]
-            fact2 = pair[2]
-            fact_dict_1 = {'type': 'structure', 'name': fact1}
-            relationship_dict = {'name': relatioship}
-            fact_dict_2 = {'type': 'structure', 'name': fact2}
-            self.res.append((fact_dict_1, relationship_dict, fact_dict_2))
+            try:
+                fact1 = pair[0]
+                relatioship = pair[1]
+                fact2 = pair[2]
+                fact_dict_1 = {'type': 'fact', 'name': fact1}
+                relationship_dict = {'name': relatioship}
+                fact_dict_2 = {'type': 'fact', 'name': fact2}
+                self.res.append((fact_dict_1, relationship_dict, fact_dict_2))
+            except Exception as e:
+                logger.error(f"pair: {pair}")
+                logger.exception(e)
         
         
     def get_results(self):

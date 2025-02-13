@@ -1,136 +1,204 @@
 from neo4j import GraphDatabase
-from knowsys import docker_management
-import random
+
+
 
 class KnowledgeGraph:
-    url = ""
-    uri = ""
-    #username = "neo4j"
-    #password = "12345678"
+    def __init__(self, uri="bolt://localhost:7687", auth=None):
+        self.driver = GraphDatabase.driver(uri, auth=auth)
 
-    def __init__(self, id) -> None:
-        self.id = id
-        self.name = id
-        manager = docker_management.DockerManager()
-        self.url,self.uri = manager.open_KG(id)
-        self.driver = GraphDatabase.driver(self.uri)
-    
-    
-    def query(self, query_statement):
-        query_result, summary, keys = self.driver.execute_query(query_statement)
-            
-        return query_result, summary, keys
-    
-    def query_result_parser(query_ressults,keys,target_properties):
-        """
-        單一key時使用
-        """
-        result=[]
-        for query_ressult in query_ressults:
-            for property in target_properties:
-                result.append(query_ressult[keys[0]].get(property))
-    
-if __name__ == '__main__':
-    manager = docker_management.DockerManager()
-    KG_name = "Sector"
-    # manager.delete_KG(KG_name)
-    KG = KnowledgeGraph(KG_name)
-    
-    #sector search 
-    sector_name = "S"
-    sector_querys = f"""
-MATCH (s:Sector {{name:'{sector_name}'}}) RETURN s;
- """
-    for cypher in sector_querys.splitlines():
-        if cypher.strip() != "":
-            query_results, summary, keys = KG.query(cypher.strip())
-            for query_result in query_results:
-                record = query_result[keys[0]]
-                print(record.get('name'))
-                # 使用 sector_node 進行後續查詢
-                concept_query = f"MATCH (s)-[:include_in]->(c:Concept) WHERE s.name = '{record.get('name')}' RETURN c" #使用f-string來將變數放入query中，並且使用id()來比對節點
-                concept_result , summary, keys= KG.query(concept_query)
-                concept = []
-                if concept_result:
-                    for concept_record in concept_result:
-                        concept.append(concept_record[keys[0]])
-                        print("Concept found : ",concept_record[keys[0]].get("name"))
-                    
-                    random.seed()
-                    selected_concept = random.choice(concept)
-                    print("selected one : ",selected_concept.get("name"))
-                    
-                    
-                    
-                    
-                    #old cypher
-                    start_node_name = selected_concept.get("name")  # 起始節點的名稱
-                    search_depth = 2  # 搜尋的層數
-                    fact_query = f"""
-                    MATCH (start_node {{name: '{start_node_name}'}})-[r*{search_depth}..{search_depth}]-(related_node)
-                    WHERE ALL(rel IN r WHERE type(rel) <> 'include_in')
-                    RETURN DISTINCT related_node
-                    """
-                    fact_query_test = f"""
-                    MATCH (start_node {{name: '{start_node_name}'}})-[r*{search_depth}..{search_depth}]-(related_node)
-                    WHERE ALL(rel IN r WHERE type(rel) <> 'include_in')
-                    WITH DISTINCT related_node
-                    MATCH (related_node)-[all_rel]-()
-                    RETURN related_node, COUNT(all_rel) AS degree
-                    ORDER BY degree DESC
-                    """
-                    
-                    
-                    
-                    
-                    #retrieve fact and sort
-                    outgoing_weight = 1
-                    incoming_weight = 1
-                    
-                    fact_query_test3=f"""
-                    MATCH (start_node {{name: '{start_node_name}'}})-[r*{search_depth}..{search_depth}]-(related_node)
-WHERE ALL(rel IN r WHERE type(rel) <> 'include_in')
-WITH DISTINCT related_node
-RETURN related_node,
-       size([(related_node)-->(x) | x IN []]) AS outgoing_degree,
-       size([(related_node)<--(x) | x IN []]) AS incoming_degree
-ORDER BY (outgoing_degree*{outgoing_weight} + incoming_degree*{incoming_weight}) DESC"""
-                    
-                    
-                    facts , summary, keys= KG.query(fact_query_test3)
-                    
-                    # facts, summary, keys = KG.query(fact_query)
 
-                    sorted_nodes = []
+    def close(self):
+        self.driver.close()
 
-                    for fact in facts:
-                        node_name = fact[keys[0]].get("name")
-                        out_count = fact[keys[1]]
-                        in_count = fact[keys[2]]
-                        
-                        sorted_nodes.append((node_name,in_count,out_count))
 
-                    print("Sorted nodes by relationship count:")
-                    for node,in_count,out_count in sorted_nodes:
-                        print(f"{node} in count: {in_count} out count:{out_count}")
-                        
-                                        
-                        
-                    # facts , summary, keys= KG.query(fact_query_test)
-                    
-                    # # facts, summary, keys = KG.query(fact_query)
+    def add_triplets(self, source_type, file_id, page_number, triplets):
+        with self.driver.session() as session:
+            for triplet in triplets:
+                subject = triplet[0]
+                predicate = triplet[1]
+                obj = triplet[2]
 
-                    # sorted_nodes = []
-
-                    # for fact in facts:
-                    #     node_name = fact[keys[0]].get("name")
-                    #     relationship_count = fact[keys[1]]
-                    #     sorted_nodes.append((node_name, relationship_count))
-
-                    # print("Sorted nodes by relationship count:")
-                    # for node, count in sorted_nodes:
-                    #     print(f"{node}: {count}")
-                    
+                # Create or merge subject node
+                if (subject_type := subject.get('type', 'Entity')) == 'fact':
+                    # Create subject node with dynamic label
+                    session.run(
+                        f"""
+                        CREATE (s:`{subject_type}` {{
+                            name: $subject_name,
+                            source_type: $source_type,
+                            file_id: $file_id,
+                            page_number: $page_number,
+                            aliases: $subject_aliases
+                        }})
+                        """,
+                        subject_name=subject["name"],
+                        source_type=source_type,
+                        file_id=file_id,
+                        page_number=page_number,
+                        subject_aliases=subject.get("aliases", [])
+                    )
                 else:
-                    print(f"找不到與{sector_name}相關的Concept")
+                    # Merge subject node and update properties (replacing aliases)
+                    session.run(
+                        f"""
+                        MERGE (s:`{subject_type}` {{name: $subject_name}})
+                        SET s.source_type = $source_type,
+                            s.file_id = $file_id,
+                            s.page_number = $page_number,  // ✅ Ensures page_number is updated
+                            s.aliases = $subject_aliases  // ✅ Directly replaces aliases
+                        """,
+                        subject_name=subject["name"],
+                        source_type=source_type,
+                        file_id=file_id,
+                        page_number=page_number,
+                        subject_aliases=subject.get("aliases", [])
+                    )
 
+                # Create or merge object node
+                if (object_type := obj.get('type', 'Entity')) == 'fact':
+                    # Create object node with dynamic label
+                    session.run(
+                        f"""
+                        CREATE (o:`{object_type}` {{
+                            name: $object_name,
+                            source_type: $source_type,
+                            file_id: $file_id,
+                            page_number: $page_number,
+                            aliases: $object_aliases
+                        }})
+                        """,
+                        object_name=obj["name"],
+                        source_type=source_type,
+                        file_id=file_id,
+                        page_number=page_number,
+                        object_aliases=obj.get("aliases", [])
+                    )
+                else:
+                    # Merge object node and update properties (replacing aliases)
+                    session.run(
+                        f"""
+                        MERGE (o:`{object_type}` {{name: $object_name}})
+                        SET o.source_type = $source_type,
+                            o.file_id = $file_id,
+                            o.page_number = $page_number,  // ✅ Ensures page_number is updated
+                            o.aliases = $object_aliases  // ✅ Directly replaces aliases
+                        """,
+                        object_name=obj["name"],
+                        source_type=source_type,
+                        file_id=file_id,
+                        page_number=page_number,
+                        object_aliases=obj.get("aliases", [])
+                    )
+
+                # Merge relationship to avoid duplication
+                session.run(
+                    f"""
+                    MATCH (s:`{subject_type}` {{name: $subject_name}}),
+                        (o:`{object_type}` {{name: $object_name}})
+                    MERGE (s)-[r:`{predicate["name"]}`]->(o)
+                    """,
+                    subject_name=subject["name"],
+                    object_name=obj["name"]
+                )
+                
+                
+    def merge_triplets(self, source_type, file_id, page_number, triplets):
+        """Merges nodes and relationships, ensuring properties like page_number and aliases are updated."""
+        with self.driver.session() as session:
+            for triplet in triplets:
+                subject = triplet[0]
+                predicate = triplet[1]
+                obj = triplet[2]
+
+                # Merge subject node and update properties (replacing aliases)
+                session.run(
+                    f"""
+                    MERGE (s:`{subject.get('type', 'Entity')}` {{name: $subject_name}})
+                    SET s.source_type = $source_type,
+                        s.file_id = $file_id,
+                        s.page_number = $page_number,  // ✅ Ensures page_number is updated
+                        s.aliases = $subject_aliases  // ✅ Directly replaces aliases
+                    """,
+                    subject_name=subject["name"],
+                    source_type=source_type,
+                    file_id=file_id,
+                    page_number=page_number,
+                    subject_aliases=subject.get("aliases", [])
+                )
+
+                # Merge object node and update properties (replacing aliases)
+                session.run(
+                    f"""
+                    MERGE (o:`{obj.get('type', 'Entity')}` {{name: $object_name}})
+                    SET o.source_type = $source_type,
+                        o.file_id = $file_id,
+                        o.page_number = $page_number,  // ✅ Ensures page_number is updated
+                        o.aliases = $object_aliases  // ✅ Directly replaces aliases
+                    """,
+                    object_name=obj["name"],
+                    source_type=source_type,
+                    file_id=file_id,
+                    page_number=page_number,
+                    object_aliases=obj.get("aliases", [])
+                )
+
+                # Merge relationship to avoid duplication
+                session.run(
+                    f"""
+                    MATCH (s:`{subject.get('type', 'Entity')}` {{name: $subject_name}}),
+                        (o:`{obj.get('type', 'Entity')}` {{name: $object_name}})
+                    MERGE (s)-[r:`{predicate["name"]}`]->(o)
+                    """,
+                    subject_name=subject["name"],
+                    object_name=obj["name"]
+                )
+
+
+if __name__ == "__main__":
+    # 測試數據
+    data = {
+        'source_type': 'pdf',
+        'file_id': 'file_id',
+        'page_number': 2,
+        'kg_name': 'ExampleKG',
+        'triplets': [
+            [
+                {
+                    "type": "fact",
+                    "name": "冬天",
+                    "aliases": ["winter", "coldseason"]
+                },
+                {
+                    "name": "is_a"
+                },
+                {
+                    "type": "concept",
+                    "name": "季節",
+                    "aliases": ["season", "period"]
+                }
+            ],
+            [
+                {
+                    "type": "fact",
+                    "name": "春天",
+                    "aliases": ["spring", "warmseason"]
+                },
+                {
+                    "name": "is_a"
+                },
+                {
+                    "type": "concept",
+                    "name": "季節",
+                    "aliases": ["season", "period"]
+                }
+            ],
+        ]
+    }
+
+    kg = KnowledgeGraph(uri='bolt://localhost:7688', auth=('neo4j', '!Qazxsw2'))
+    kg.add_triplets(data['source_type'], data['file_id'], data['page_number'], data['triplets'])
+    
+    data['page_number'] = 3
+    kg.add_triplets(data['source_type'], data['file_id'], data['page_number'], data['triplets'])
+    # kg.merge_triplets(data['source_type'], data['file_id'], data['page_number'], data['triplets'])
+    kg.close()

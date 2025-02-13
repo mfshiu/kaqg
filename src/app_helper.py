@@ -24,7 +24,7 @@ config = {}
 def initialize(module_name=None):
     global _logger
     if _logger:
-        _logger.warning(f"Initialized.")
+        # _logger.warning(f"Initialized.")
         return
     
     config_path = get_config_path()
@@ -47,6 +47,8 @@ def initialize(module_name=None):
 def _init_logging(config):
     log_name = "wastepro"
     log_path = os.path.join(os.getcwd(), '_log', f'{log_name}.log')
+    # if os.path.exists(log_path):
+    #     os.remove(log_path)
     log_level = logging.DEBUG    
     if cfg := config.get('logging'):
         log_name = cfg.get("name", log_name)
@@ -67,7 +69,7 @@ def _init_logging(config):
     file_formatter = logging.Formatter(fmt, datefmt)
     
     # File handler
-    file_handler = TimedRotatingFileHandler(log_path, when="d", encoding="utf-8")
+    file_handler = TimedRotatingFileHandler(log_path, when="d", encoding="utf-8", backupCount=0)
     file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
