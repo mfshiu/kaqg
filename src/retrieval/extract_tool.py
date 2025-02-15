@@ -1,17 +1,46 @@
+"""
+This module provides tools for extracting concepts and facts from text and building knowledge graphs.
+It includes functionality for text analysis, concept categorization, and relationship mapping.
+"""
+
 from openai import OpenAI
 import re
 import json
+import os
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 from transformers import pipeline
 
-api_key = "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"
+# Get API key from environment variable
+api_key = os.getenv('OPENAI_API_KEY')
+if api_key is None:
+    raise ValueError("Please set the OPENAI_API_KEY environment variable")
 
 class GptChat:
+    """
+    A class to handle interactions with OpenAI's GPT models.
+    Provides streaming chat completion functionality.
+    """
     def __init__(self, api_key=api_key, model="gpt-4o-mini"):
+        """
+        Initialize the GPT chat client.
+        
+        Args:
+            api_key (str): OpenAI API key
+            model (str): Name of the GPT model to use
+        """
         self.client = OpenAI(api_key=api_key)
         self.model = model
 
     def __call__(self, message="Say this is a test"):
+        """
+        Send a message to the GPT model and stream the response.
+        
+        Args:
+            message (str): Input message to send to the model
+            
+        Returns:
+            list: Accumulated response chunks from the model
+        """
         stream = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": message}],
@@ -25,6 +54,16 @@ class GptChat:
         return reply
     
 def get_concept_n_fact(chat, context):
+    """
+    Extract concepts and facts from given context and organize them into a hierarchy.
+    
+    Args:
+        chat: GPT chat instance
+        context (str): Input text to analyze
+        
+    Returns:
+        tuple: (facts list, concepts list, entity hierarchy dictionary)
+    """
     query_concept_and_fact =f'''
             Please structure the following context into triplets. The context will be divided into two levels: fact and concept. A fact refers to all entities that can be found in the context, while a concept refers to the higher-level categories of those facts.
 
@@ -114,6 +153,16 @@ def get_concept_n_fact(chat, context):
     return factes, concepts, entity_hierarchy
 
 def get_aliases(chat, aliases_keys):
+    """
+    Generate English aliases for given keywords.
+    
+    Args:
+        chat: GPT chat instance
+        aliases_keys (list): List of keywords to generate aliases for
+        
+    Returns:
+        dict: Mapping of original terms to their English aliases
+    """
     query_get_aliases = f'''
                         Please provide me with the aliases for each item in the array mentioned below. The aliases must be in English. Return them in the format of a dictionary, without including any additional context outside of the dictionary. It is very important to answer all of th items within array.
                         # array:
@@ -128,6 +177,16 @@ def get_aliases(chat, aliases_keys):
     return aliases_table
 
 def get_facts_pairs(facts, context):
+    """
+    Extract entity-relationship-entity triplets from the context.
+    
+    Args:
+        facts (list): List of extracted facts
+        context (str): Input text to analyze
+        
+    Returns:
+        list: List of triplets representing relationships between entities
+    """
     query_get_aliases = f'''
                         # entities: {facts} 
                         # context: {context}
@@ -144,10 +203,24 @@ def get_facts_pairs(facts, context):
     return data
 
 class SectionPairer:
+    """
+    A class to establish relationships between different elements in the knowledge structure.
+    Handles pairing of facts, concepts, and structural elements.
+    """
+    
     def __init__(self):
+        """Initialize an empty result list to store relationships."""
         self.res = []
 
     def pair_sections_with_facts(self, sections, entity_hierarchy, aliases_table):
+        """
+        Create relationships between facts and their corresponding concepts.
+        
+        Args:
+            sections (list): List of document sections
+            entity_hierarchy (dict): Hierarchy of entities and their concepts
+            aliases_table (dict): Mapping of terms to their aliases
+        """
         for concept, facts in entity_hierarchy.items():
             for fact in facts:
                 fact_dict = {'type': 'fact', 'name': fact, 'aliases': aliases_table.get(fact)}
@@ -156,6 +229,14 @@ class SectionPairer:
                 self.res.append((fact_dict, is_a_dict, concept_dict))
 
     def pair_sections_with_concepts(self, sections, concepts, aliases_table):
+        """
+        Create relationships between concepts and document sections.
+        
+        Args:
+            sections (list): List of document sections
+            concepts (list): List of identified concepts
+            aliases_table (dict): Mapping of terms to their aliases
+        """
         for concept in concepts:
             for section in sections:
                 concept_dict = {'type': 'concept', 'name': concept, 'aliases': aliases_table.get(concept)}
@@ -164,6 +245,12 @@ class SectionPairer:
                 self.res.append((concept_dict, include_in_dict, structure_dict))
 
     def pair_lower_to_higher_sections(self, sections):
+        """
+        Establish hierarchical relationships between document sections.
+        
+        Args:
+            sections (list): List of document sections in hierarchical order
+        """
         for section_p in range(len(sections) - 1):
             rest_sections = sections[section_p + 1:]
             
@@ -174,6 +261,12 @@ class SectionPairer:
                 self.res.append((structure_dict_1, part_of_dict, structure_dict_2))
     
     def pair_facts_and_facts(self, facts_pair):
+        """
+        Create relationships between different facts.
+        
+        Args:
+            facts_pair (list): List of fact pairs to be related
+        """
         for pair in facts_pair:
             fact1 = pair[0]
             relatioship = pair[1]
@@ -184,11 +277,17 @@ class SectionPairer:
             self.res.append((fact_dict_1, relationship_dict, fact_dict_2))
         
     def get_results(self):
+        """
+        Retrieve all established relationships.
+        
+        Returns:
+            list: All relationship triplets
+        """
         return self.res
 
 
 if __name__ == "__main__":
-
+    # Example usage of the module
     chat = GptChat()
 
     sections = ['chapter1', 'ch1-1', 'ch1-1-1']
