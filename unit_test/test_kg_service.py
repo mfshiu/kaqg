@@ -11,8 +11,8 @@ import time
 import unittest
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import BinaryParcel, Parcel
-from services.file_service import FileService
+from agentflow.core.parcel import TextParcel, Parcel
+from services.kg_service import KnowledgeGraphService, Action, Topic
 
 config_test = app_helper.get_agent_config()
 logger.info(f"config_test: {config_test}")
@@ -25,23 +25,21 @@ class TestAgent(unittest.TestCase):
     
     class ValidationAgent(Agent):
         def __init__(self):
-            super().__init__(name='main', agent_config=config_test)
+            super().__init__(name='validation', agent_config=config_test)
 
 
         def on_connected(self):
-            self._subscribe('file_uploaded')
-            
             time.sleep(1)
-            filename = 'test_img1.jpg'
-            with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
-                content = file.read()
-            # pcl = BinaryParcel(content, 'file_uploaded')
-            # pcl.set('filename', filename)
-            pcl = BinaryParcel({
+
+            return_topic = self.agent_id
+            self._subscribe(return_topic)
+            
+            pcl = TextParcel({
                 'content': content,
                 'filename': filename,
-                'hello': 'how are you?'}, 'file_uploaded')
-            self._publish('FileUpload/FileService/Services', pcl)
+                'hello': 'how are you?'
+            }, return_topic)
+            self._publish(Topic.TOPIC_CREATE, pcl)
 
 
         def on_message(self, topic:str, pcl:Parcel):
@@ -53,10 +51,6 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        home_directory = os.path.join(os.getcwd(), '_upload')
-        if not os.path.exists(home_directory):
-            os.mkdir(home_directory)
-            
         # Comment here if FileService is started at another location.
         # self.file_agent = FileService(config_test, storage_root)
         # self.file_agent.start()

@@ -1,17 +1,23 @@
-import signal
-import time
+# Required when executed as the main program.
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import app_helper
+app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+###
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import BinaryParcel, Parcel
-import app_helper
+from agentflow.core.parcel import BinaryParcel, Parcel, TextParcel
 from services.file_service import FileService
-from services.kg_service import KnowledgeGraphService
-from .extract_tool import *
+from services.kg_service import KnowledgeGraphService, Action
+from services.llm_service import LlmService
+from retrieval import ensure_size
+# import retrieval.extract_tool as et
+from retrieval.extract_tool import FactConceptExtractor, SectionPairer
+from retrieval.pdf_tool import PdfImport
 
-from logging import Logger
-
-from src.retrieval.pdf_tool import PdfImport
-logger:Logger = __import__('wastepro').get_logger()
 
 
 class PdfRetriever(Agent):
@@ -31,37 +37,46 @@ class PdfRetriever(Agent):
 
     def _handle_retrieval(self, topic, pcl:BinaryParcel):
         # Upload the file
-        pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl)
+        kg_name = pcl.content.get('kg_name', 0)
+        # logger.info(f"topic: {topic}, pcl: {pcl}")
+        
+        pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl, timeout=40)
         file_info = pcl_file.content
-        logger.debug(f"topic: {topic}, filename: {file_info.get('filename')}")
+        logger.info(f"file_info: {file_info}")
         # file_info: {
-        #     'file_id': file_id,
-        #     'filename': filename,
-        #     'mime_type': mime_type,
-        #     'encoding': encoding,
-        #     'file_path': file_path,
-        #     'toc': table_of_content,
+            # 'file_id': file_id,
+            # 'filename': filename,
+            # 'mime_type': mime_type,
+            # 'encoding': encoding,
+            # 'file_path': file_path,
         # }
         
-        kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
+        # kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
         # kg_info: {
-        #     'kg_id': kg_id,
+        #     'kg_name': kg_name,
         #     'topic_triplets_add': topic_triplets_add,
         # }
-        
+        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_name)
+        logger.verbose(f"topic_triplets_add: {topic_triplets_add}")
+
         pages = self.read_pages(file_info['file_path'])
-        if 'toc' not in file_info:
+
+        if not 'toc' in file_info:
             # Set all pages belong to 'Root' if 
-            file_info['toc'] = [('Root', 0, len(pages), [])]
+            file_info['toc'] = [('Omnichapter', 0, len(pages), [])]
+
         for page_number, page_content in enumerate(pages):
+            logger.info(f"{page_number+1}: {ensure_size(page_content, 150)}")
             sections = self.locate_sections(page_number, file_info['toc'])
+            logger.info(f"sections: {sections}")
             triplets = self.extract_triplets(page_content, sections)
-            self._publish(kg_info['topic_triplets_add'], {
+            logger.info(f"triplets: {triplets[:5]}..")
+            self._publish(topic_triplets_add, {
                 'source_type': 'pdf',
                 'file_id': file_info['file_id'],
-                'page_number': page_number,
+                'page_number': page_number+1,
+                'kg_name': kg_name,
                 'triplets': triplets,
-                'kg_id': kg_info['kg_id'],
             })
 
         self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
@@ -118,10 +133,9 @@ class PdfRetriever(Agent):
         return sections
 
 
-    # TODO: Implement this method
     def read_pages(self, file_path) -> list[str]:
         """
-        Reads a PDF file from the given file path into a list.
+        Reads a PDF file from the given file into a list.
         
         Args:
             file_path (str): The absolute file path.
@@ -130,9 +144,7 @@ class PdfRetriever(Agent):
         """
         
         pdf_import = PdfImport(file_path)
-        return pdf_import.extract_text()
-        
-        
+        return pdf_import.extract_pages()
         # Example of return.
         # return [
         #     '104 年全國各縣市焚化底渣產量約占焚化量之 15%。',
@@ -141,7 +153,6 @@ class PdfRetriever(Agent):
         # ]
 
 
-    # TODO: Implement this method
     def extract_triplets(self, page_content, sections) -> list[tuple[dict, dict, dict]]:
         """
         Convert the page content into triplets. The triplets should contain below types of relationships:
@@ -169,7 +180,7 @@ class PdfRetriever(Agent):
                 'name': '申請書',
                 'aliases': ['application form','formulario de solicitud'],
                 }
-            
+
             Example of a relation dict:
             relation = {
                 'name': 'contain',
@@ -209,19 +220,29 @@ class PdfRetriever(Agent):
             {'name': '委外再利用'}, 
             {'type': 'fact', 'name': '焚化廠底渣', 'aliases': ['incineration plant bottom ash']}),
         ]
-        """  
+        """
 
+        extractor = FactConceptExtractor(PdfRetriever.LlmChat(self))
+        
         # extract facts and concepts in LLM
-        factes, concepts, entity_hierarchy = get_concept_n_fact(chat, page_content)
+        logger.info("Start to extract facts and concepts in LLM..")
+        factes, concepts, entity_hierarchy = extractor.get_concept_n_fact(page_content)
+        logger.debug(f"\nfactes: {factes[:5]}..\nconcepts: {concepts[:5]}..\nentity_hierarchy: {entity_hierarchy}")
+        
         # extract fact-relationship-fact in LLM
-        facts_pairs = get_facts_pairs(factes, page_content)
+        logger.info("Start to extract fact-relationship-fact in LLM..")
+        facts_pairs = extractor.get_facts_pairs(factes, page_content)
+        logger.debug(f"facts_pairs: {facts_pairs[:5]}..")
+        
         # get aliases and save as dict in LLM
         aliases_keys = factes + concepts
-        aliases_table = get_aliases(chat, aliases_keys)
+        logger.info("Start to get aliases in LLM..")
+        aliases_table = extractor.get_aliases(aliases_keys)
+        logger.debug(f"aliases_table: {aliases_table}")
 
         # start to generate triplets
         pairer = SectionPairer()
-        pairer.pair_sections_with_facts(sections, entity_hierarchy, aliases_table)
+        pairer.pair_concepts_with_facts(sections, entity_hierarchy, aliases_table)
         pairer.pair_sections_with_concepts(sections, concepts, aliases_table)
         pairer.pair_lower_to_higher_sections(sections)
         pairer.pair_facts_and_facts(facts_pairs)
@@ -231,19 +252,22 @@ class PdfRetriever(Agent):
 
 
 
+    class LlmChat:
+        def __init__(self, agent:Agent):
+            self.agent = agent
+
+
+        def __call__(self, message:str):
+            pcl = TextParcel({'prompt': message})
+            logger.verbose(f"pcl: {pcl}")
+            
+            chat_response = self.agent._publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
+            # logger.debug(f"chat_response: {chat_response}")
+            return chat_response.content['response']
+
+
+
 if __name__ == '__main__':
-    main_agent = PdfRetriever(app_helper.get_agent_config())
-    logger.debug(f'***** {main_agent.__class__.__name__} *****')
-    
-
-    def signal_handler(signal, frame):
-        main_agent.terminate()
-    signal.signal(signal.SIGINT, signal_handler)
-
-
-    main_agent.start_process()
-
-    time.sleep(1)
-    while main_agent.is_active():
-        print('.', end='')
-        time.sleep(1)
+    agent = PdfRetriever(app_helper.get_agent_config())
+    agent.start_process()
+    app_helper.wait_agent(agent)

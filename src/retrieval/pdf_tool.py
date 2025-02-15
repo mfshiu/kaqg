@@ -12,8 +12,10 @@ import os
 import sys  
 
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
+# logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
 
 
 class PdfImport:
@@ -48,11 +50,11 @@ class PdfImport:
         return ''.join(words)
 
 
-    def extract_text(self):
+    def extract_pages(self):
         pages = []
         
         # 提取 PDF 文件的文字內容
-        logger.info("開始提取文字內容")
+        logger.debug("提取文字內容..")
         with pdfplumber.open(self.pdf_path) as pdf:
             for page in pdf.pages:
                 text = page.extract_text()
@@ -165,7 +167,7 @@ class PdfImport:
 
     def process(self):
         # 創建執行緒來處理文字提取
-        text_thread = threading.Thread(target=self.extract_text)
+        text_thread = threading.Thread(target=self.extract_pages)
         text_thread.start()
 
         # 創建執行緒來處理圖像提取
