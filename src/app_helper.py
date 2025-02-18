@@ -33,6 +33,7 @@ def initialize(module_name=None):
         raise FileNotFoundError(f"Configuration file not found at: {config_path}")
 
     global config
+    print(config_path, "!!!!!!!!!!!!!!!")
     config = __import__('toml').load(config_path)
     
     if module_name:
