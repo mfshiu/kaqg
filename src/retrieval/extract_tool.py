@@ -60,8 +60,8 @@ class GptChatNoStream:
         reply = response.choices[0].message.content
         # print(reply)  # Print the response
         return reply
-    
-    
+
+
 
 class FactConceptExtractor:
     def __init__(self, chat=None):
