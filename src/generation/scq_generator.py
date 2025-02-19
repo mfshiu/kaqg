@@ -66,12 +66,129 @@ class SingleChoiceGenerator(Agent):
     def choice_concept(self, concept_nodes):
         return random.choice(concept_nodes)
     
-    
+    def _get_one_weighted_combination(self,S):
+        """
+        隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
+        每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
+
+        權重分配：
+        - stem_cognitive_level：1.5
+        - high_distractor_count：1.2
+        - 其他特徵：1
+
+        :param S: 目標總分
+        :return: 一組符合條件的參數組合，對應七個具體描述
+        """
+        # 定義各參數的權重  
+        weights = [1, 1, 1.5, 1, 1, 1, 1.2]
+        
+        # 篩選符合條件的組合
+        valid_combinations = []
+        for combination in product(range(1, 4), repeat=7):
+            weighted_sum = sum(x * w for x, w in zip(combination, weights))
+            if S - 1 <= weighted_sum <= S + 1:
+                valid_combinations.append(combination)
+        
+        # 若無符合條件的組合，返回 None
+        if not valid_combinations:
+            return None
+
+        # 隨機選取一組並命名參數
+        selected = random.choice(valid_combinations)
+        result = {
+            "stem_length": selected[0],
+            "stem_technical_term_density": selected[1],
+            "stem_cognitive_level": selected[2],
+            "option_average_length": selected[3],
+            "option_similarity": selected[4],
+            "stem_option_similarity": selected[5],
+            "high_distractor_count": selected[6],
+        }
+        return result
+
+    def _generate_prompt(self, parameters):
+        """
+        根據參數分數和特徵表，自動生成出題敘述。
+        
+        :param parameters: 包含 7 個特徵的分數，格式為字典
+        :return: 題目敘述
+        """
+        # 定義參數範圍對應描述
+        stem_length_desc = {
+            "high": "題幹字數較長（超過 20 字）",
+            "medium": "題幹字數中等（15 至 35 字之間）",
+            "low": "題幹字數較短（10 至 25 字）"
+        }
+
+        technical_term_density_desc = {
+            "high": "題幹使用了較多專業術語（3 個以上）",
+            "medium": "題幹有適當的專業術語（2 至 4 個）",
+            "low": "題幹使用較少或無專業術語（0 至 2 個）"
+        }
+
+        cognitive_level_desc = {
+            "high": "需進行分析、綜合或評估",
+            "medium": "涉及知識點的理解與綜合",
+            "low": "僅需記憶知識點"
+        }
+
+        option_length_desc = {
+            "high": "選項文字較長（5 字以上）",
+            "medium": "選項文字中等（3 至 8 字之間）",
+            "low": "選項文字較短（1 至 5 字）"
+        }
+
+        option_similarity_desc = {
+            "high": "選項間有較高相似度（60% 以上）",
+            "medium": "選項間相似度適中（45% 左右）",
+            "low": "選項間相似度較低（30% 以下）"
+        }
+
+        stem_option_similarity_desc = {
+            "high": "題幹與選項內容高度相關（60% 以上）",
+            "medium": "題幹與選項內容相關性適中（45% 左右）",
+            "low": "題幹與選項內容相關性較低（30% 以下）"
+        }
+
+        high_distractor_count_desc = {
+            "high": "包含 3 個以上的高誘答選項",
+            "medium": "包含 2 個高誘答選項",
+            "low": "包含 1 個高誘答選項"
+        }
+
+        # 根據參數生成對應敘述
+        prompt = (
+            f"題幹字數：{stem_length_desc['high' if parameters['stem_length'] == 3 else 'medium' if parameters['stem_length'] == 2 else 'low']}；\n"
+            f"題幹專業詞密度：{technical_term_density_desc['high' if parameters['stem_technical_term_density'] == 3 else 'medium' if parameters['stem_technical_term_density'] == 2 else 'low']}；\n"
+            f"認知程度：{cognitive_level_desc['high' if parameters['stem_cognitive_level'] == 3 else 'medium' if parameters['stem_cognitive_level'] == 2 else 'low']}；\n"
+            f"選項平均字數：{option_length_desc['high' if parameters['option_average_length'] == 3 else 'medium' if parameters['option_average_length'] == 2 else 'low']}；\n"
+            f"選項間相似度：{option_similarity_desc['high' if parameters['option_similarity'] == 3 else 'medium' if parameters['option_similarity'] == 2 else 'low']}；\n"
+            f"題幹與選項相似度：{stem_option_similarity_desc['high' if parameters['stem_option_similarity'] == 3 else 'medium' if parameters['stem_option_similarity'] == 2 else 'low']}；\n"
+            f"高誘答選項數：{high_distractor_count_desc['high' if parameters['high_distractor_count'] == 3 else 'medium' if parameters['high_distractor_count'] == 2 else 'low']}。"
+        )
+        return prompt    
+
     def generate_question(self, source_sentences, difficulty):
+        # Eddie
         # difficulty: 30, 50, 70
         # 丙：10分 for difficulty 30
         # 乙：14分 for difficulty 50
         # 甲：18分 for difficulty 70
+        # 隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
+        # 每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
+        # 權重分配：- stem_cognitive_level：1.5 - high_distractor_count：1.2 - 其他特徵：1
+
+        difficulty_mapping = {
+            30: 10,
+            50: 14,
+            70: 18
+        }
+        
+        score = difficulty_mapping[difficulty]
+        combination = self._get_one_weighted_combination(score)
+        prompt = self._generate_prompt(combination)
+        
+        # 生成題目
         queation = {
             'type': 'SCQ',
             'stem': 'The question stem',

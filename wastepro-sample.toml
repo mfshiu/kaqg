@@ -4,14 +4,14 @@ version = 1
 [logging]
 name = "wastepro"
 path = "_log/wastepro.log"
-level = "INFO"  # VERBOSE, DEBUG, INFO, WARNING, ERROR
+level = "VERBOSE"  # VERBOSE, DEBUG, INFO, WARNING, ERROR
 
 [broker]
 broker_name = "mqtt"
 
 [broker.mqtt]
 broker_type = "mqtt"
-host = "aaa.gigoo.co"
+host = "localhost"
 port = 1883
 username = ""
 password = ""
@@ -29,3 +29,7 @@ heartbeat = 30
 
 [service.file]
 home_directory = "_upload"
+
+[service.llm]
+openai_api_key = "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"
+openai_api_key_eddie = ""

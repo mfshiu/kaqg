@@ -23,6 +23,15 @@ class GptChat:
 
 
     def __call__(self, message="Say this is a test"):
+        """
+        Send a message to the GPT model and stream the response.
+        
+        Args:
+            message (str): Input message to send to the model
+            
+        Returns:
+            list: Accumulated response chunks from the model
+        """
         stream = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": message}],
@@ -198,7 +207,13 @@ Following the output format as below is very important do not return any context
 
 
 class SectionPairer:
+    """
+    A class to establish relationships between different elements in the knowledge structure.
+    Handles pairing of facts, concepts, and structural elements.
+    """
+    
     def __init__(self):
+        """Initialize an empty result list to store relationships."""
         self.res = []
 
 
@@ -212,6 +227,14 @@ class SectionPairer:
 
 
     def pair_sections_with_concepts(self, sections, concepts, aliases_table):
+        """
+        Create relationships between concepts and document sections.
+        
+        Args:
+            sections (list): List of document sections
+            concepts (list): List of identified concepts
+            aliases_table (dict): Mapping of terms to their aliases
+        """
         structure_dict = {'type': 'structure', 'name': sections[-1][-1]}
         include_in_dict = {'name': 'include_in'}
         
@@ -236,6 +259,12 @@ class SectionPairer:
    
     
     def pair_facts_and_facts(self, facts_pair):
+        """
+        Create relationships between different facts.
+        
+        Args:
+            facts_pair (list): List of fact pairs to be related
+        """
         for pair in facts_pair:
             try:
                 fact1 = pair[0]
@@ -251,6 +280,12 @@ class SectionPairer:
         
         
     def get_results(self):
+        """
+        Retrieve all established relationships.
+        
+        Returns:
+            list: All relationship triplets
+        """
         return self.res
 
 
