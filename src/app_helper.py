@@ -90,6 +90,13 @@ def _init_logging(config):
     logger.info(f"Log name: {logger.name}, Level: {logger.level}, Path: {log_path}")
 
     return logger
+
+
+def fix_json(json_text):
+    last_valid_index = max(json_text.rfind("}"), json_text.rfind("]"))
+    json_fixed = json_text[:last_valid_index+1]
+
+    return json_fixed
     
     
 def get_log_level(level):

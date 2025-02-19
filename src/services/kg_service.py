@@ -94,7 +94,6 @@ class KnowledgeGraphService(Agent):
     def handle_triplets_add(self, topic:str, pcl:TextParcel):
         logger.debug(f"content: {pcl.content}")
         # pcl.content: {
-                # 'source_type': 'pdf',
                 # 'file_id': file_info['file_id'],
                 # 'page_number': page_number+1,
                 # 'kg_name': kg_name,
@@ -106,7 +105,7 @@ class KnowledgeGraphService(Agent):
         logger.info(f"bolt_url: {bolt_url}")
         kg = KnowledgeGraph(uri=bolt_url, auth=('neo4j', '!Qazxsw2'))
         data = pcl.content
-        kg.add_triplets(data['source_type'], data['file_id'], data['page_number'], data['triplets'])
+        kg.add_triplets(data['file_id'], data['page_number'], data['triplets'])
         
 
     def query_concepts(self, topic:str, pcl:TextParcel):
@@ -177,7 +176,8 @@ if __name__ == '__main__':
     config = app_helper.get_agent_config()
     config['kg'] = app_helper.config['service']['kg']
     kg_agent = KnowledgeGraphService(config)
-    kg_agent.start_process()
+    # kg_agent.start_process()
+    kg_agent.start_thread()
 
     if "-test" in sys.argv:
         ValidationAgent().start_thread()

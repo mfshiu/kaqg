@@ -6,12 +6,29 @@ import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 
 import argparse
+import signal
 import os
 import time
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
 from retrieval.pdf_retriever import PdfRetriever
+
+
+is_running = True
+toc = [
+    ('chapter1', 0, 9, [
+        ('ch1-1', 0, 4, [
+            ('ch1-1-1', 0, 1, []),
+            ('ch1-1-2', 1, 4, [])
+        ]),
+        ('ch1-2', 5, 9, [])
+    ]),
+    ('chapter2', 10, 25, [
+        ('ch2-1', 10, 12, []),
+        ('ch2-2', 13, 25, [])
+    ])
+]
 
 
 
@@ -26,11 +43,18 @@ class ExecutionAgent(Agent):
     def _ingest_document(self):
         self._subscribe(PdfRetriever.TOPIC_RETRIEVED)
         
+        filename = os.path.basename(self.file_path)
+        meta = {
+            'title': os.path.splitext(filename)[0],
+        }
+        
         with open(self.file_path, 'rb') as file:
             content = file.read()
         pcl = BinaryParcel({
-            'filename': os.path.basename(self.file_path),
+            'filename': filename,
             'kg_name': self.subject_name,
+            'toc': toc,
+            'meta': meta,
             'content': content,})
         self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
@@ -72,7 +96,7 @@ def ingest_document(subject_name, file_path):
     agent.start_thread()
 
     timeout_sec = file_size // 1024
-    while timeout_sec and agent.is_active():
+    while is_running and timeout_sec and agent.is_active():
         time.sleep(1)
         timeout_sec -= 1
         print(f"Countdown: {timeout_sec}", end="\r", flush=True)
@@ -102,6 +126,12 @@ def main():
 
 
 if __name__ == '__main__':
+    def signal_handler(signal, frame):
+        global is_running
+        is_running = False
+        print("Ctrl-C for Exiting...")
+    signal.signal(signal.SIGINT, signal_handler)
+
     main()
 
 

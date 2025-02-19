@@ -144,7 +144,16 @@ class FactConceptExtractor:
         concepts = text[0].replace('[', '').replace(']', '').replace('"', '').replace(' ', '').strip().split(',')
 
         entity_hierarchy = text[1]
-        entity_hierarchy = json.loads(entity_hierarchy)
+        # logger.verbose(f"entity_hierarchy:\n{entity_hierarchy}")
+        try:
+            entity_hierarchy = json.loads(app_helper.fix_json(entity_hierarchy))
+        except Exception as e:
+            raise ValueError(f"""{e}
+Error in parsing entity_hierarchy:
+{entity_hierarchy}
+
+answer_concept_and_fact:
+{answer_concept_and_fact}""")
 
         return factes, concepts, entity_hierarchy
 
@@ -203,24 +212,28 @@ class SectionPairer:
 
 
     def pair_sections_with_concepts(self, sections, concepts, aliases_table):
+        structure_dict = {'type': 'structure', 'name': sections[-1][-1]}
+        include_in_dict = {'name': 'include_in'}
+        
         for concept in concepts:
-            for section in sections:
-                concept_dict = {'type': 'concept', 'name': concept, 'aliases': aliases_table.get(concept)}
-                include_in_dict = {'name': 'include_in'}
-                structure_dict = {'type': 'structure', 'name': section}
-                self.res.append((concept_dict, include_in_dict, structure_dict))
+            concept_dict = {'type': 'concept', 'name': concept, 'aliases': aliases_table.get(concept)}
+            self.res.append((concept_dict, include_in_dict, structure_dict))
 
 
-    def pair_lower_to_higher_sections(self, sections):
-        for section_p in range(len(sections) - 1):
-            rest_sections = sections[section_p + 1:]
-            
-            for r_section in rest_sections:
-                structure_dict_1 = {'type': 'structure', 'name': r_section}
-                part_of_dict = {'name': 'part_of'}
-                structure_dict_2 = {'type': 'structure', 'name': sections[section_p]}
-                self.res.append((structure_dict_1, part_of_dict, structure_dict_2))
-    
+    def pair_lower_to_higher_sections(self, sections, meta):
+        sections = sections[-1]
+        logger.verbose(f"pair sections: {sections}, meta: {meta}")
+        
+        part_of_dict = {'name': 'part_of'}
+        for i in range(len(sections)-1):
+            if i == 0:
+                structure_dict_0 = {'type': 'document', 'name': sections[i], 'meta': meta}
+            else:
+                structure_dict_0 = {'type': 'structure', 'name': sections[i]}
+            structure_dict_1 = {'type': 'structure', 'name': sections[i+1]}
+            self.res.append((structure_dict_1, part_of_dict, structure_dict_0))
+            logger.verbose(f"append sections: {(structure_dict_1, part_of_dict, structure_dict_0)}")
+   
     
     def pair_facts_and_facts(self, facts_pair):
         for pair in facts_pair:

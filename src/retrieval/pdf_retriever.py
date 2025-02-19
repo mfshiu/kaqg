@@ -1,5 +1,6 @@
 # Required when executed as the main program.
 import os, sys
+from turtle import title
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
@@ -49,6 +50,8 @@ class PdfRetriever(Agent):
             # 'mime_type': mime_type,
             # 'encoding': encoding,
             # 'file_path': file_path,
+            # 'toc': {..},  # json
+            # 'meta': {..}, # dict
         # }
         
         # kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
@@ -61,25 +64,43 @@ class PdfRetriever(Agent):
 
         pages = self.read_pages(file_info['file_path'])
 
-        if not 'toc' in file_info:
-            # Set all pages belong to 'Root' if 
-            file_info['toc'] = [('Omnichapter', 0, len(pages), [])]
+        meta = file_info.get('meta', {})
+        meta['filename'] = file_info['filename']
+        meta['mime_type'] = file_info['mime_type']
+        meta['encoding'] = file_info['encoding']
+        meta['file_path'] = file_info['file_path']
+        meta['title'] = meta['title'] if 'title' in meta else file_info['filename']
+            
+        toc = [(meta['title'], 0, len(pages), file_info['toc'] if 'toc' in file_info else [])]
+        logger.debug(f"toc: {toc}")
 
-        for page_number, page_content in enumerate(pages):
-            logger.info(f"{page_number+1}: {ensure_size(page_content, 150)}")
-            sections = self.locate_sections(page_number, file_info['toc'])
-            logger.info(f"sections: {sections}")
-            triplets = self.extract_triplets(page_content, sections)
-            logger.info(f"triplets: {triplets[:5]}..")
+        def process_page(page_number, page_content, file_info, kg_name, topic_triplets_add):
+            """Process a single page, extracting and publishing triplets."""
+            logger.info(f"Page {page_number}: {ensure_size(page_content, 150)}")
+            sections = self.locate_sections(page_number, toc)
+            logger.debug(f"sections: {sections}")
+            triplets = self.extract_triplets(page_content, sections, meta)
+            logger.verbose(f"triplets: {triplets[:5]}..")
             self._publish(topic_triplets_add, {
-                'source_type': 'pdf',
                 'file_id': file_info['file_id'],
-                'page_number': page_number+1,
+                'page_number': page_number,
                 'kg_name': kg_name,
                 'triplets': triplets,
             })
 
-        self._publish(PdfRetriever.TOPIC_RETRIEVED, file_info)
+        for page_number, page_content in enumerate(pages):
+            max_attempts = 3
+            attempt = 0
+            # Retry processing the page if an error occurs in max_attempts times.
+            while attempt < max_attempts:
+                try:
+                    process_page(page_number, page_content, file_info, kg_name, topic_triplets_add)
+                    break  # Exit loop if successful
+                except Exception as e:
+                    attempt += 1
+                    logger.warning(f"Error processing page {page_number} (Attempt {attempt}/{max_attempts}):\n{e}")
+                    if attempt == max_attempts:
+                        logger.error(f"Skipping page {page_number} after {max_attempts} failed attempts.")
         
 
     chapter = tuple[str, int, int, list['chapter']]
@@ -115,8 +136,8 @@ class PdfRetriever(Agent):
         """
         def find_sections(page_number: int, toc: list[PdfRetriever.chapter], parent_hierarchy: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
             matches = []
-            for chapter in toc:
-                name, start_page, end_page, subchapters = chapter
+            for ch in toc:
+                name, start_page, end_page, subchapters = ch
                 current_hierarchy = parent_hierarchy + (name,)
                 
                 if start_page <= page_number <= end_page:
@@ -153,7 +174,7 @@ class PdfRetriever(Agent):
         # ]
 
 
-    def extract_triplets(self, page_content, sections) -> list[tuple[dict, dict, dict]]:
+    def extract_triplets(self, page_content, sections, meta) -> list[tuple[dict, dict, dict]]:
         """
         Convert the page content into triplets. The triplets should contain below types of relationships:
         1. The relationship from the sub-structure node to the structure node. (part_of)
@@ -244,7 +265,7 @@ class PdfRetriever(Agent):
         pairer = SectionPairer()
         pairer.pair_concepts_with_facts(sections, entity_hierarchy, aliases_table)
         pairer.pair_sections_with_concepts(sections, concepts, aliases_table)
-        pairer.pair_lower_to_higher_sections(sections)
+        pairer.pair_lower_to_higher_sections(sections, meta)
         pairer.pair_facts_and_facts(facts_pairs)
 
         triplets = pairer.get_results()
