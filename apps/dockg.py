@@ -64,7 +64,7 @@ class ExecutionAgent(Agent):
         self.terminate()
 
 
-def load_toc_from_file(toc_file):
+def load_toc(toc_file):
     """ 從 pprint 格式的文件讀取 toc """
     if not os.path.exists(toc_file):
         print(f"Error: The TOC file '{toc_file}' does not exist.")
@@ -89,8 +89,7 @@ def ingest_document(subject_name, file_path, toc_file=None):
         return
     file_size = os.path.getsize(file_path)
 
-    # 如果提供了 TOC 檔案，則讀取，否則使用預設 TOC
-    toc = load_toc_from_file(toc_file) if toc_file else None
+    toc = load_toc(toc_file) if toc_file else None
     print(f"TOC: {toc}")
     print(f"Importing '{file_path}' into the knowledge graph under the subject '{subject_name}'...")
 
