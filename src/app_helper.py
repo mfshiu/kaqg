@@ -4,6 +4,13 @@ import os
 import signal
 import time
 
+# for GVFS
+import shutil
+import subprocess
+import platform
+import tempfile
+from contextlib import contextmanager
+
 # Logging setting
 import logging 
 from logging.handlers import TimedRotatingFileHandler
@@ -91,6 +98,34 @@ def _init_logging(config):
     logger.info(f"Log name: {logger.name}, Level: {logger.level}, Path: {log_path}")
 
     return logger
+
+
+@contextmanager
+def ensure_local_copy(gvfs_path):
+    """自動處理 GVFS WebDAV 檔案，確保複製到本地後讀取，並在 with 結束後刪除暫存檔案"""
+    is_linux = platform.system() == "Linux"
+    # is_windows = platform.system() == "Windows"
+
+    # 取得正確的暫存目錄
+    local_tmp_dir = tempfile.gettempdir()
+    local_pdf_path = os.path.join(local_tmp_dir, os.path.basename(gvfs_path))
+
+    # Linux: 取得使用者 UID（避免 Windows 執行 os.getuid()）
+    gvfs_base_path = f"/run/user/{os.getuid()}/gvfs/" if is_linux else None
+
+    try:
+        if is_linux and gvfs_base_path and gvfs_path.startswith(gvfs_base_path):
+            # Linux GVFS WebDAV 使用 `gio copy`
+            subprocess.run(["gio", "copy", gvfs_path, local_pdf_path], check=True)
+        else:
+            # Windows 或一般 Linux 檔案使用 `shutil.copy`
+            shutil.copy(gvfs_path, local_pdf_path)
+
+        yield local_pdf_path  # `with` 內部使用 local_pdf_path
+
+    finally:
+        if os.path.exists(local_pdf_path):
+            os.remove(local_pdf_path)
 
 
 def fix_json(json_text):

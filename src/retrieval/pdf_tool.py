@@ -1,8 +1,6 @@
 from PIL import Image
 import threading
-import base64
 import io
-import json
 import numpy as np
 import fitz 
 import pdfplumber 
@@ -10,6 +8,8 @@ import csv
 import logging
 import os
 import sys  
+
+from app_helper import ensure_local_copy
 
 
 import logging
@@ -53,15 +53,15 @@ class PdfImport:
     def extract_pages(self):
         pages = []
         
-        # 提取 PDF 文件的文字內容
         logger.debug("提取文字內容..")
-        with pdfplumber.open(self.pdf_path) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    text = text.replace("\n", "")
-                    text = self._remove_non_latin_space(text)
-                    pages.append(text)
+        with ensure_local_copy(self.pdf_path) as local_path:
+            with pdfplumber.open(local_path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        text = text.replace("\n", "")
+                        text = self._remove_non_latin_space(text)
+                        pages.append(text)
                     
         return pages
 
