@@ -71,7 +71,10 @@ class PdfRetriever(Agent):
         meta['file_path'] = file_info['file_path']
         meta['title'] = meta['title'] if 'title' in meta else file_info['filename']
             
-        toc = [(meta['title'], 0, len(pages), file_info['toc'] if 'toc' in file_info else [])]
+        toc = [(meta['title'], 
+                0, 
+                len(pages), 
+                file_info['toc'] if 'toc' in file_info else [])]
         logger.debug(f"toc: {toc}")
 
         def process_page(page_number, page_content, file_info, kg_name, topic_triplets_add):
