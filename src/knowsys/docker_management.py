@@ -166,9 +166,10 @@ class DockerManager:
                 print(f"KG '{kgName}' is already running. HTTP at: http://{self.hostname}:{http_port}, BOLT at: bolt://{self.hostname}:{bolt_port}")
                 return f"http://{self.hostname}:{http_port}", f"bolt://{self.hostname}:{bolt_port}"
 
+        raise ValueError(f"KG '{kgName}' is not running. Please create it first.")
         # 若 KG 尚未運行，則創建它
-        print(f"KG '{kgName}' is not running. Creating a new container...")
-        return self.create_container(kgName)
+        # print(f"KG '{kgName}' is not running. Creating a new container...")
+        # return self.create_container(kgName)
 
         
     def stop_KG(self, kgName):
