@@ -7,9 +7,9 @@ path = "_log/wastepro.log"
 level = "VERBOSE"  # VERBOSE, DEBUG, INFO, WARNING, ERROR
 
 [broker]
-broker_name = "mqtt"
+broker_name = "mqtt01"
 
-[broker.mqtt]
+[broker.mqtt01]
 broker_type = "mqtt"
 host = "localhost"
 port = 1883

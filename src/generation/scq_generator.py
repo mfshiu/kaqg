@@ -13,6 +13,9 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
 from services.kg_service import Topic
+from generation.ranker.node_ranker import NodeRanker
+from generation.ranker.simple_ranker import SimpleRanker
+from generation.ranker.weighted_ranker import WeightedRanker
 
 
 
@@ -51,35 +54,12 @@ class SingleChoiceGenerator(Agent):
         if not concept_nodes:
             raise ValueError("Unable to generate any questions from the question criteria.")
 
-        target_concept = self.choice_concept(concept_nodes)
-        fact_nodes = self.retrieve_fact_nodes(target_concept)
+        ranker = SimpleRanker()
+        # ranker = WeightedRanker()
+        target_concept = ranker.rank_concepts(concept_nodes)
+        fact_nodes = ranker.rank_facts(target_concept)
         if not fact_nodes:
             raise ValueError(f"Unable to generate any questions from the concept: {target_concept} of the criteria: {question_criteria}")
-
-
-        question = {
-            'type': 'SCQ',
-            'stem': 'The question stem',
-            'options': ['option1', 'option2', 'option3', 'option4'],
-            'answer': 1,
-        }
-
-        question['question_criteria'] = question_criteria
-        
-        return question
-        
-        
-    def x_create_question(self, question_criteria):
-        # Retrieve target concept
-        concept_nodes = self.retrieve_concept_nodes(question_criteria['section'])
-        if not concept_nodes:
-            raise ValueError("Unable to generate any questions from the question criteria.")
-        target_concept = self.choice_concept(concept_nodes)
-
-        # Retrieve fact nodes
-        fact_nodes = self.retrieve_fact_nodes(target_concept) # Must be sorted.
-        if not fact_nodes:
-            raise ValueError(f"Unable to generate any questions from the concept: {target_concept}")
 
         # From fact nodes to question
         source_sentences = self.generate_source_sentences(fact_nodes)
@@ -88,6 +68,17 @@ class SingleChoiceGenerator(Agent):
         question['question_criteria'] = question_criteria
 
         return question
+
+        # question = {
+        #     'type': 'SCQ',
+        #     'stem': 'The question stem',
+        #     'options': ['option1', 'option2', 'option3', 'option4'],
+        #     'answer': 1,
+        # }
+
+        # question['question_criteria'] = question_criteria
+        
+        # return question
 
     
     def choice_concept(self, concept_nodes):
@@ -243,7 +234,7 @@ class SingleChoiceGenerator(Agent):
         return concepts
     
     
-    def retrieve_fact_nodes(self, concept):
+    def choice_fact_nodes(self, concept):
         facts = {
             "年份": ["104 年"],
             "百分比": ["15%", "89.3%"],
