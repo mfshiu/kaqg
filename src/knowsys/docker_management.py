@@ -23,6 +23,7 @@ class DockerManager:
         self.hostname = hostname
         self.client = docker.from_env()
         self.image = "neo4j:community"
+        # self.image = "neo4j:5.26.3-community-ubi9"
         self.volumns  = self.datapath
         self.detach = True
 
