@@ -1,16 +1,21 @@
+# Required when executed as the main program.
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import app_helper
+app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+###
+
 import random
-import signal
-import time
+
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
-from agentflow.core.parcel import TextParcel, Parcel
-import app_helper
-from services.file_service import FileService
-from services.kg_service import KnowledgeGraphService
-
-
-from logging import Logger
-logger:Logger = __import__('wastepro').get_logger()
+from agentflow.core.parcel import TextParcel
+from services.kg_service import Topic
+from generation.ranker.node_ranker import NodeRanker
+from generation.ranker.simple_ranker import SimpleRanker
+from generation.ranker.weighted_ranker import WeightedRanker
 
 
 
@@ -23,8 +28,8 @@ class SingleChoiceGenerator(Agent):
         super().__init__(name='scq.generation.wp', agent_config=config)
 
 
-    def on_connected(self):
-        logger.debug(f"on_connected")
+    def on_activate(self):
+        logger.verbose(f"on_activate")
         self._subscribe(SingleChoiceGenerator.TOPIC_CREATE, topic_handler=self._handle_create)
 
 
@@ -43,16 +48,18 @@ class SingleChoiceGenerator(Agent):
 
 
     def _create_question(self, question_criteria):
-        # Retrieve target concept
-        concept_nodes = self.retrieve_concept_nodes(question_criteria['section'])
+        concept_nodes = self.retrieve_concept_nodes(question_criteria['subject'],
+                                                    question_criteria['document'],
+                                                    question_criteria['section'])
         if not concept_nodes:
             raise ValueError("Unable to generate any questions from the question criteria.")
-        target_concept = self.choice_concept(concept_nodes)
 
-        # Retrieve fact nodes
-        fact_nodes = self.retrieve_fact_nodes(target_concept) # Must be sorted.
+        ranker = SimpleRanker()
+        # ranker = WeightedRanker()
+        target_concept = ranker.rank_concepts(concept_nodes)
+        fact_nodes = ranker.rank_facts(target_concept)
         if not fact_nodes:
-            raise ValueError(f"Unable to generate any questions from the concept: {target_concept}")
+            raise ValueError(f"Unable to generate any questions from the concept: {target_concept} of the criteria: {question_criteria}")
 
         # From fact nodes to question
         source_sentences = self.generate_source_sentences(fact_nodes)
@@ -62,9 +69,21 @@ class SingleChoiceGenerator(Agent):
 
         return question
 
+        # question = {
+        #     'type': 'SCQ',
+        #     'stem': 'The question stem',
+        #     'options': ['option1', 'option2', 'option3', 'option4'],
+        #     'answer': 1,
+        # }
+
+        # question['question_criteria'] = question_criteria
+        
+        # return question
+
     
     def choice_concept(self, concept_nodes):
         return random.choice(concept_nodes)
+    
     
     def _get_one_weighted_combination(self,S):
         """
@@ -207,14 +226,15 @@ class SingleChoiceGenerator(Agent):
         ]
     
     
-    def retrieve_concept_nodes(self, section):
-        if 'chapter1' == section[0]:
-            return ['廢棄物']
-        else:
-            return None
+    def retrieve_concept_nodes(self, subject, document, sections):
+        topic = Topic.TOPIC_CONCEPTS_QUERY.value
+        pcl = TextParcel({'kg_name': subject, 'document': document, 'sections': sections})
+        concepts = self._publish_sync(topic, pcl).content['concepts']
+        logger.debug(f"concepts: {', '.join(concepts[:10])}..")
+        return concepts
     
     
-    def retrieve_fact_nodes(self, concept):
+    def choice_fact_nodes(self, concept):
         facts = {
             "年份": ["104 年"],
             "百分比": ["15%", "89.3%"],
@@ -235,18 +255,6 @@ class SingleChoiceGenerator(Agent):
 
 
 if __name__ == '__main__':
-    main_agent = SingleChoiceGenerator(app_helper.get_agent_config())
-    logger.debug(f'***** {main_agent.__class__.__name__} *****')
-    
-
-    def signal_handler(signal, frame):
-        main_agent.terminate()
-    signal.signal(signal.SIGINT, signal_handler)
-
-
-    main_agent.start_process()
-
-    time.sleep(1)
-    while main_agent.is_active():
-        print('.', end='')
-        time.sleep(1)
+    agent = SingleChoiceGenerator(app_helper.get_agent_config())
+    agent.start_process()
+    app_helper.wait_agent(agent)

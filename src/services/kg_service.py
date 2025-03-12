@@ -109,7 +109,20 @@ class KnowledgeGraphService(Agent):
         
 
     def query_concepts(self, topic:str, pcl:TextParcel):
-        pass
+        logger.debug(f"content: {pcl.content}")
+        # pcl.content: {
+                # 'kg_name': kg_name,
+                # 'document': 'document name',
+                # 'sections': ['section1', 'section2'],
+        #     }
+        kg_name = pcl.content['kg_name']
+        _, bolt_url = self.docker_manager.open_KG(kg_name)
+        logger.info(f"bolt_url: {bolt_url}")
+        kg = KnowledgeGraph(uri=bolt_url, auth=('neo4j', '!Qazxsw2'))
+
+        data = pcl.content
+        parent_names = [data['document']] + data['sections']
+        return {'concepts': kg.query_concepts(parent_names)}
 
 
     def query_facts(self, topic:str, pcl:TextParcel):
