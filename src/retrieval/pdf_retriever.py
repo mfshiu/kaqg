@@ -32,7 +32,7 @@ class PdfRetriever(Agent):
 
     def on_connected(self):
         logger.debug(f"on_connected")
-        self._subscribe(PdfRetriever.TOPIC_FILE_UPLOAD, topic_handler=self._handle_retrieval)
+        self.subscribe(PdfRetriever.TOPIC_FILE_UPLOAD, topic_handler=self._handle_retrieval)
 
 
     def _handle_retrieval(self, topic, pcl:BinaryParcel):
@@ -40,7 +40,7 @@ class PdfRetriever(Agent):
         kg_name = pcl.content.get('kg_name', 0)
         # logger.info(f"topic: {topic}, pcl: {pcl}")
         
-        pcl_file:Parcel = self._publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl, timeout=40)
+        pcl_file:Parcel = self.publish_sync(FileService.TOPIC_FILE_UPLOAD, pcl, timeout=40)
         file_info = pcl_file.content
         logger.info(f"file_info: {file_info}")
         # file_info: {
@@ -53,7 +53,7 @@ class PdfRetriever(Agent):
             # 'meta': {..}, # dict
         # }
         
-        # kg_info = self._publish_sync(KnowledgeGraphService.TOPIC_CREATE)
+        # kg_info = self.publish_sync(KnowledgeGraphService.TOPIC_CREATE)
         # kg_info: {
         #     'kg_name': kg_name,
         #     'topic_triplets_add': topic_triplets_add,
@@ -83,7 +83,7 @@ class PdfRetriever(Agent):
             logger.debug(f"sections: {sections}")
             triplets = self.extract_triplets(page_content, sections, meta)
             logger.verbose(f"triplets: {triplets[:5]}..")
-            self._publish(topic_triplets_add, {
+            self.publish(topic_triplets_add, {
                 'file_id': file_info['file_id'],
                 'page_number': page_number,
                 'kg_name': kg_name,
@@ -284,7 +284,7 @@ class PdfRetriever(Agent):
             pcl = TextParcel({'prompt': message})
             logger.verbose(f"pcl: {pcl}")
             
-            chat_response = self.agent._publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
+            chat_response = self.agent.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
             # logger.debug(f"chat_response: {chat_response}")
             return chat_response.content['response']
 

@@ -32,14 +32,14 @@ class TestAgent(unittest.TestCase):
             time.sleep(1)
 
             return_topic = self.agent_id
-            self._subscribe(return_topic)
+            self.subscribe(return_topic)
             
             pcl = TextParcel({
                 'content': content,
                 'filename': filename,
                 'hello': 'how are you?'
             }, return_topic)
-            self._publish(Topic.TOPIC_CREATE, pcl)
+            self.publish(Topic.CREATE, pcl)
 
 
         def on_message(self, topic:str, pcl:Parcel):

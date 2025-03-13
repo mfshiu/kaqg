@@ -29,7 +29,7 @@ class TestAgent(unittest.TestCase):
 
 
         def on_connected(self):
-            self._subscribe('file_uploaded')
+            self.subscribe('file_uploaded')
             
             time.sleep(1)
             filename = 'test_img1.jpg'
@@ -41,7 +41,7 @@ class TestAgent(unittest.TestCase):
                 'content': content,
                 'filename': filename,
                 'hello': 'how are you?'}, 'file_uploaded')
-            self._publish('FileUpload/FileService/Services', pcl)
+            self.publish('FileUpload/FileService/Services', pcl)
 
 
         def on_message(self, topic:str, pcl:Parcel):

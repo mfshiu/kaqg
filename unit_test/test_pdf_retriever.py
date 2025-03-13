@@ -37,9 +37,9 @@ class TestAgent(unittest.TestCase):
         def on_activate(self):
             logger.info("on_connected")
 
-            self._subscribe(PdfRetriever.TOPIC_RETRIEVED)
+            self.subscribe(PdfRetriever.TOPIC_RETRIEVED)
             
-            self._publish_sync(KGTopic.TOPIC_CREATE, TextParcel({'kg_name': self.kg_name}), timeout=20)
+            self.publish_sync(KGTopic.CREATE, TextParcel({'kg_name': self.kg_name}), timeout=20)
             # self.docker_management.create_container(self.kg_name)
             
             for filename in ['Pdf01-台文.pdf', 'Pdf01-English.pdf', 'Pdf01-日本語.pdf']:
@@ -49,7 +49,7 @@ class TestAgent(unittest.TestCase):
                     'content': content,
                     'filename': filename,
                     'kg_name': self.kg_name})
-                self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
+                self.publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
 
         def on_message(self, topic:str, pcl:Parcel):

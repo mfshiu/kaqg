@@ -65,7 +65,7 @@ class LlmService(Agent):
     
 
     def on_connected(self):
-        self._subscribe(LlmService.TOPIC_LLM_PROMPT, "str", self.handle_prompt)
+        self.subscribe(LlmService.TOPIC_LLM_PROMPT, "str", self.handle_prompt)
 
 
     def handle_prompt(self, topic:str, pcl:TextParcel):
@@ -90,13 +90,13 @@ if __name__ == '__main__':
         def on_connected(self):
             time.sleep(2)
 
-            self._subscribe(self.agent_id)
+            self.subscribe(self.agent_id)
             
             pcl = TextParcel({
                 'prompt': "現在的美國總統是誰？",
                 }, topic_return=self.agent_id)
             logger.info(self.M(f"pcl: {pcl}"))
-            self._publish(LlmService.TOPIC_LLM_PROMPT, pcl)
+            self.publish(LlmService.TOPIC_LLM_PROMPT, pcl)
 
 
         def on_message(self, topic:str, pcl:TextParcel):

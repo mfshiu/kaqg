@@ -1,7 +1,11 @@
 import json
+import os
+from venv import logger
 from neo4j import GraphDatabase
 import threading
 
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 
 class KnowledgeGraph:
@@ -13,10 +17,25 @@ class KnowledgeGraph:
         self.driver = GraphDatabase.driver(uri, auth=auth)
 
 
-    # def close(self):
-    #     self.driver.close()
+    def __enter__(self):
+        return self
 
-    
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+
+    @staticmethod
+    def serialize_node(node):
+        serialized = {
+            "element_id": node.element_id,   # Neo4j 唯一識別碼
+            "labels": list(node.labels),    # 節點標籤
+        }
+        serialized.update(dict(node))  # 屬性
+        
+        return serialized
+
+
     def __is_node_exist(node_type, node_name, file_id, page_number):
         if file_id not in KnowledgeGraph._facts:
             with KnowledgeGraph._facts_lock:
@@ -63,132 +82,138 @@ class KnowledgeGraph:
 
 
     def add_triplets(self, file_id, page_number, triplets):
-        try:
-            with self.driver.session() as session:
-                for triplet in triplets:
-                    subject = triplet[0]
-                    predicate = triplet[1]
-                    obj = triplet[2]
+        with self.driver.session() as session:
+            for triplet in triplets:
+                subject = triplet[0]
+                predicate = triplet[1]
+                obj = triplet[2]
 
-                    # Create or merge subject node
-                    if (subject_type := subject.get('type', 'Entity')) == 'fact':
-                        KnowledgeGraph._add_fact(session, subject_type, subject, file_id, page_number)
-                    elif (subject_type := subject.get('type', 'Entity')) == 'structure':
-                        session.run(
-                            f"""
-                            MERGE (s:`{subject_type}` {{name: $subject_name}})
-                            SET s.file_id = $file_id
-                            """,
-                            subject_name=subject["name"],
-                            file_id=file_id
-                        )
-                    else:   # concept
-                        session.run(
-                            f"""
-                            MERGE (s:`{subject_type}` {{name: $subject_name}})
-                            SET s.file_id = $file_id,
-                                s.aliases = $aliases
-                            """,
-                            subject_name=subject["name"],
-                            file_id=file_id,
-                            aliases=subject.get("aliases", [])
-                        )
-
-                    # Create or merge object node
-                    if (object_type := obj.get('type', 'Entity')) == 'fact':
-                        KnowledgeGraph._add_fact(session, object_type, obj, file_id, page_number)
-                    elif (object_type := obj.get('type', 'Entity')) == 'document':
-                        session.run(
-                            f"""
-                            MERGE (o:`{object_type}` {{name: $object_name}})
-                            SET o.file_id = $file_id,
-                                o.metadata = $metadata
-                            """,
-                            object_name=obj["name"],
-                            file_id=file_id,
-                            metadata=json.dumps(obj.get("meta", None))
-                        )
-                    elif (object_type := obj.get('type', 'Entity')) == 'structure':
-                        session.run(
-                            f"""
-                            MERGE (o:`{object_type}` {{name: $object_name}})
-                            SET o.file_id = $file_id
-                            """,
-                            object_name=obj["name"],
-                            file_id=file_id
-                        )
-                    else:   # concept
-                        session.run(
-                            f"""
-                            MERGE (o:`{object_type}` {{name: $object_name}})
-                            SET o.file_id = $file_id,
-                                o.aliases = $aliases
-                            """,
-                            object_name=obj["name"],
-                            file_id=file_id,
-                            aliases=obj.get("aliases", [])
-                        )
-
-                    # Merge relationship to avoid duplication
+                # Create or merge subject node
+                if (subject_type := subject.get('type', 'Entity')) == 'fact':
+                    KnowledgeGraph._add_fact(session, subject_type, subject, file_id, page_number)
+                elif (subject_type := subject.get('type', 'Entity')) == 'structure':
                     session.run(
                         f"""
-                        MATCH (s:`{subject_type}` {{name: $subject_name}}),
-                            (o:`{object_type}` {{name: $object_name}})
-                        MERGE (s)-[r:`{predicate["name"]}`]->(o)
+                        MERGE (s:`{subject_type}` {{name: $subject_name}})
+                        SET s.file_id = $file_id
                         """,
                         subject_name=subject["name"],
-                        object_name=obj["name"]
+                        file_id=file_id
                     )
-        finally:
-            self.driver.close()
+                else:   # concept
+                    session.run(
+                        f"""
+                        MERGE (s:`{subject_type}` {{name: $subject_name}})
+                        SET s.file_id = $file_id,
+                            s.aliases = $aliases
+                        """,
+                        subject_name=subject["name"],
+                        file_id=file_id,
+                        aliases=subject.get("aliases", [])
+                    )
+
+                # Create or merge object node
+                if (object_type := obj.get('type', 'Entity')) == 'fact':
+                    KnowledgeGraph._add_fact(session, object_type, obj, file_id, page_number)
+                elif (object_type := obj.get('type', 'Entity')) == 'document':
+                    session.run(
+                        f"""
+                        MERGE (o:`{object_type}` {{name: $object_name}})
+                        SET o.file_id = $file_id,
+                            o.metadata = $metadata
+                        """,
+                        object_name=obj["name"],
+                        file_id=file_id,
+                        metadata=json.dumps(obj.get("meta", None))
+                    )
+                elif (object_type := obj.get('type', 'Entity')) == 'structure':
+                    session.run(
+                        f"""
+                        MERGE (o:`{object_type}` {{name: $object_name}})
+                        SET o.file_id = $file_id
+                        """,
+                        object_name=obj["name"],
+                        file_id=file_id
+                    )
+                else:   # concept
+                    session.run(
+                        f"""
+                        MERGE (o:`{object_type}` {{name: $object_name}})
+                        SET o.file_id = $file_id,
+                            o.aliases = $aliases
+                        """,
+                        object_name=obj["name"],
+                        file_id=file_id,
+                        aliases=obj.get("aliases", [])
+                    )
+
+                # Merge relationship to avoid duplication
+                session.run(
+                    f"""
+                    MATCH (s:`{subject_type}` {{name: $subject_name}}),
+                        (o:`{object_type}` {{name: $object_name}})
+                    MERGE (s)-[r:`{predicate["name"]}`]->(o)
+                    """,
+                    subject_name=subject["name"],
+                    object_name=obj["name"]
+                )
             
+            
+    def close(self):
+        self.driver.close()
+        
 
     def _query_concepts_tx(tx, parent_names):
         """
         供 session.execute_read() 呼叫的交易函式，
         會在 Neo4j 交易上下文(tx)中執行實際的 Cypher 查詢。
         """
-
-        # 若只有一個名稱(只有 document、沒有任何 structure)，通常不會有 concept
-        if len(parent_names) == 1:
+        
+        if not parent_names:
+            logger.error("parent_names is empty.")
             return []
 
-        # 第 0 個是 document，其餘皆為 structure
         doc_name = parent_names[0]
-        structure_names = parent_names[1:]
+        if len(parent_names) == 1:
+            # 只有 document，查詢與 document 有 :include_in 關係的 concept
+            last_structure_var = structure_vars[-1]
+            cypher_list = [f"MATCH (c:concept)-[:include_in]->({doc_name}:document)"]
+        else:
+            # 第 0 個是 document，其餘皆為 structure
+            structure_names = parent_names[1:]
 
-        # 產生結構節點變數 (s0, s1, s2, ...)
-        structure_vars = [f"s{i}" for i in range(len(structure_names))]
+            # 產生結構節點變數 (s0, s1, s2, ...)
+            structure_vars = [f"s{i}" for i in range(len(structure_names))]
 
-        # 依序組合 Cypher
-        # MATCH (doc:document {name: $docName})
-        # MATCH (s0:structure {name: $structureName0})-[:part_of]->(doc)
-        # ...
-        # MATCH (c:concept)-[:include_in]->(最後一個 structure)
-        # RETURN c.name
-        cypher_list = [
-            "MATCH (doc:document {name: $docName})"
-        ]
+            # 依序組合 Cypher
+            # MATCH (doc:document {name: $docName})
+            # MATCH (s0:structure {name: $structureName0})-[:part_of]->(doc)
+            # ...
+            # MATCH (c:concept)-[:include_in]->(最後一個 structure)
+            # RETURN c.name
+            cypher_list = [
+                "MATCH (doc:document {name: $docName})"
+            ]
 
-        for i, s_name in enumerate(structure_names):
-            if i == 0:
-                # 第 1 層 structure 連到 doc
-                cypher_list.append(
-                    f"MATCH ({structure_vars[i]}:structure {{name: $structureName{i}}})-[:part_of]->(doc)"
-                )
-            else:
-                # 之後的 structure 連到上一層 structure
-                cypher_list.append(
-                    f"MATCH ({structure_vars[i]}:structure {{name: $structureName{i}}})-[:part_of]->({structure_vars[i-1]})"
-                )
+            for i, s_name in enumerate(structure_names):
+                if i == 0:
+                    # 第 1 層 structure 連到 doc
+                    cypher_list.append(
+                        f"MATCH ({structure_vars[i]}:structure {{name: $structureName{i}}})-[:part_of]->(doc)"
+                    )
+                else:
+                    # 之後的 structure 連到上一層 structure
+                    cypher_list.append(
+                        f"MATCH ({structure_vars[i]}:structure {{name: $structureName{i}}})-[:part_of]->({structure_vars[i-1]})"
+                    )
 
-        # 查詢與最後一層 structure 有 :include_in 關係的 concept
-        last_structure_var = structure_vars[-1]
-        cypher_list.append(
-            f"MATCH (c:concept)-[:include_in]->({last_structure_var})"
-        )
+            # 查詢與最後一層 structure 有 :include_in 關係的 concept
+            last_structure_var = structure_vars[-1]
+            cypher_list.append(
+                f"MATCH (c:concept)-[:include_in]->({last_structure_var})"
+            )
+            
         cypher_list.append("RETURN DISTINCT c.name AS conceptName")
-
         final_cypher = "\n".join(cypher_list)
 
         # 設定查詢參數
@@ -199,9 +224,13 @@ class KnowledgeGraph:
         # 執行查詢
         result = tx.run(final_cypher, **params)
 
-        # 解析回傳紀錄，取出 conceptName
-        concept_names = [record["conceptName"] for record in result]
-        return concept_names
+        # 解析回傳紀錄，取出完整的 concept 節點
+        concepts = [KnowledgeGraph.serialize_node(record["c"]) for record in result]
+        logger.verbose(f"Query concepts: {concepts}")
+        return concepts
+        # # 解析回傳紀錄，取出 conceptName
+        # concept_names = [record["conceptName"] for record in result]
+        # return concept_names
 
 
     def query_concepts(self, parent_names):
@@ -219,17 +248,108 @@ class KnowledgeGraph:
         最後一個名稱 (parent_names[-1]) 為最末層的 structure 節點，
         查詢與該節點有 :include_in 關係的所有 concept。
         """
-        try:
-            with self.driver.session() as session:
-                # 使用 session.execute_read() 呼叫查詢
-                concept_names = session.execute_read(
-                    KnowledgeGraph._query_concepts_tx, 
-                    parent_names=parent_names
-                )
-                return concept_names
-        finally:
-            self.driver.close()
+        with self.driver.session() as session:
+            concepts = session.execute_read(
+                KnowledgeGraph._query_concepts_tx, 
+                parent_names=parent_names
+            )
+            return concepts
 
+
+    def query_nodes_by_name(self, node_name, label=None):
+        """ Returns a list of serialized nodes matching the given name and optional label. """
+        query = "MATCH (n" + (":" + label if label else "") + " {name: $node_name}) RETURN n"
+        
+        with self.driver.session() as session:
+            result = session.run(query, node_name=node_name)
+            return [self.serialize_node(record["n"]) for record in result]
+        
+
+    def query_nodes_related_by(self, node_eid, relation=None, label=None):
+        """ Returns a list of serialized nodes related to the given node by the given relation. """
+        label_clause = f":{label}" if label else ""
+        relation_clause = f":{relation}" if relation else ""
+        
+        query = f"""
+        MATCH (m{label_clause})-[{relation_clause}]->(n)
+        WHERE elementId(n) = $node_eid
+        RETURN m
+        """
+
+        with self.driver.session() as session:
+            result = session.run(query, node_eid=node_eid)
+            return [self.serialize_node(record["m"]) for record in result]
+        
+        
+    def query_nodes_relate_to(self, node_eid, relation=None, label=None):
+        """ Returns a list of serialized nodes that the given node relates to via the specified relation. """
+        label_clause = f":{label}" if label else ""
+        relation_clause = f":{relation}" if relation else ""
+
+        query = f"""
+        MATCH (n)-[{relation_clause}]->(m{label_clause})
+        WHERE elementId(n) = $node_eid
+        RETURN m
+        """
+
+        with self.driver.session() as session:
+            result = session.run(query, node_eid=node_eid)
+            return [self.serialize_node(record["m"]) for record in result]
+
+
+    def query_subsections(self, document, section_path=None):
+        def _query_subsections(self, document, section_path=None):
+            
+            def fetch_all_subsections(session, parent_path):
+                query = """
+                MATCH (sec:structure {name: $last_section})
+                OPTIONAL MATCH (sub:structure)-[:part_of]->(sec)
+                RETURN collect(sub) AS subsections
+                """
+                
+                last_section = parent_path[-1]["name"]
+                result = session.run(query, last_section=last_section)
+                subsections = result.single()["subsections"]
+                
+                all_paths = [parent_path]
+                if subsections:
+                    for sub in subsections:
+                        all_paths.extend(fetch_all_subsections(session, parent_path + [sub]))
+                
+                return all_paths
+            
+            
+            with self.driver.session() as session:
+                if section_path is None:
+                    query = """
+                    MATCH (doc:document {name: $document})
+                    OPTIONAL MATCH (sec:structure)-[:part_of]->(doc)
+                    RETURN collect(sec) AS sections
+                    """
+                    result = session.run(query, document=document)
+                    sections = result.single()["sections"]
+                    
+                    all_paths = []
+                    if sections:
+                        for section in sections:
+                            all_paths.extend(fetch_all_subsections(session, [section]))
+                    return all_paths
+                else:
+                    initial_nodes = []
+                    for section in section_path:
+                        query = """
+                        MATCH (sec:structure {name: $section})
+                        RETURN sec
+                        """
+                        result = session.run(query, section=section)
+                        node = result.single()["sec"]
+                        if node:
+                            initial_nodes.append(node)
+                    
+                    return fetch_all_subsections(session, initial_nodes)
+    
+        sectionss = _query_subsections(self, document, section_path)
+        return [self.serialize_node(sections[-1]) for sections in sectionss]
 
 
 if __name__ == "__main__":
@@ -277,4 +397,3 @@ if __name__ == "__main__":
     
     data['page_number'] = 3
     kg.add_triplets(data['file_id'], data['page_number'], data['triplets'])
-    # kg.close()

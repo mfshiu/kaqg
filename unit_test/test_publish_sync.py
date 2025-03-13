@@ -19,7 +19,7 @@ logger:Logger = __import__('wastepro').get_logger()
 
 class AgentResponse(Agent):
     def on_connected(self):
-        self._subscribe('topic_1')
+        self.subscribe('topic_1')
     
     
     def on_message(self, topic:str, pcl:Parcel):
@@ -43,10 +43,10 @@ class TestAgent(unittest.TestCase):
 
         def on_connected(self):
             time.sleep(1)
-            # self._publish('topic_1', 1)
-            TestAgent.data_resp = int(self._publish_sync('topic_1', 1, 'topic_2').content)
-            TestAgent.data_resp_a = int(self._publish_sync('topic_1', TestAgent.data_resp, 'topic_2').content)
-            TestAgent.data_resp_b = int(self._publish_sync('topic_1', TestAgent.data_resp_a).content)
+            # self.publish('topic_1', 1)
+            TestAgent.data_resp = int(self.publish_sync('topic_1', 1, 'topic_2').content)
+            TestAgent.data_resp_a = int(self.publish_sync('topic_1', TestAgent.data_resp, 'topic_2').content)
+            TestAgent.data_resp_b = int(self.publish_sync('topic_1', TestAgent.data_resp_a).content)
             TestAgent.data_got = True
 
 

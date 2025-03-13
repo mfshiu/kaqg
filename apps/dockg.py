@@ -27,7 +27,7 @@ class ExecutionAgent(Agent):
         self.toc = toc  
         
     def _ingest_document(self):
-        self._subscribe(PdfRetriever.TOPIC_RETRIEVED)
+        self.subscribe(PdfRetriever.TOPIC_RETRIEVED)
         
         filename = os.path.basename(self.file_path)
         meta = {
@@ -45,7 +45,7 @@ class ExecutionAgent(Agent):
         if self.toc:
             pcl_content['toc'] = self.toc
         pcl = BinaryParcel(pcl_content)
-        self._publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
+        self.publish(PdfRetriever.TOPIC_FILE_UPLOAD, pcl)
 
 
     def on_activate(self):

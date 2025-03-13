@@ -16,7 +16,7 @@ class TextService(Agent):
 
 
     def on_connected(self):
-        self._subscribe(TextService.TOPIC_TEXT_EXTRACT, "str", self.handle_text_extract)
+        self.subscribe(TextService.TOPIC_TEXT_EXTRACT, "str", self.handle_text_extract)
 
 
     def _on_start(self):

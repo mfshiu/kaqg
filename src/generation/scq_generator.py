@@ -1,5 +1,7 @@
 # Required when executed as the main program.
 import os, sys
+
+import test
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
@@ -30,55 +32,70 @@ class SingleChoiceGenerator(Agent):
 
     def on_activate(self):
         logger.verbose(f"on_activate")
-        self._subscribe(SingleChoiceGenerator.TOPIC_CREATE, topic_handler=self._handle_create)
+        self.subscribe(SingleChoiceGenerator.TOPIC_CREATE, topic_handler=self._handle_create)
 
 
     def _handle_create(self, topic, pcl:TextParcel):
-        question_criteria = pcl.content
         # question_criteria = {
         #     'question_id': 'Q101',              # 使用者自訂題目 ID
+        #     'subject':  'Subject Name',         # 科目名稱
+        #     'document': 'Book Name',            # 教材名稱
         #     'section': ['chapter1', 'ch1-1'],   # 指定章節
         #     'difficulty': 50,                   # 難度 30, 50, 70
         # }
+        question_criteria = pcl.content
+        logger.debug(f"question_criteria: {question_criteria}")
         
-        generated_question = self._create_question(question_criteria)
+        generated_question = self._generate_question(question_criteria)
 
         logger.debug(f"generated_question: {generated_question}")
         return generated_question
+    
+    
+    def test_return(self, question_criteria):
+        question = {
+            'type': 'SCQ',
+            'stem': 'The question stem',
+            'options': ['option1', 'option2', 'option3', 'option4'],
+            'answer': 1,
+            'question_criteria': question_criteria
+        }
+        return question
 
 
-    def _create_question(self, question_criteria):
-        concept_nodes = self.retrieve_concept_nodes(question_criteria['subject'],
-                                                    question_criteria['document'],
-                                                    question_criteria['section'])
-        if not concept_nodes:
-            raise ValueError("Unable to generate any questions from the question criteria.")
+    def _generate_question(self, question_criteria):
+        question = {
+            'question_criteria': question_criteria,
+        }
+        qc = question_criteria
 
-        ranker = SimpleRanker()
-        # ranker = WeightedRanker()
-        target_concept = ranker.rank_concepts(concept_nodes)
-        fact_nodes = ranker.rank_facts(target_concept)
-        if not fact_nodes:
-            raise ValueError(f"Unable to generate any questions from the concept: {target_concept} of the criteria: {question_criteria}")
+        # From question criteria to concepts
+        pcl = TextParcel({'kg_name': qc['subject'], 'document': qc['document'], 'section': qc['section']})
+        concepts = self.publish_sync(Topic.CONCEPTS_QUERY.value, pcl).content['concepts']
+        logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
+        if not concepts:
+            logger.error(msg := f"No concepts found.")
+            question['error'] = msg
+            return question
 
+        # From concepts to core concept and fact nodes
+        ranker = SimpleRanker(self, qc['subject'], qc['document'], qc['section'])
+        # ranker = WeightedRanker(self, qc['subject'], qc['document'], qc['section'])
+        core_concept = ranker.rank_concepts(concepts)
+        facts = ranker.rank_facts(core_concept)
+        logger.debug(f"facts: {', '.join([n['name'] for n in facts])}")
+        if not facts:
+            question['error'] = 'No facts found.'
+            return question
+
+        return self.test_return(question_criteria)
         # From fact nodes to question
-        source_sentences = self.generate_source_sentences(fact_nodes)
-
-        question = self.generate_question(source_sentences, question_criteria['difficulty'])
-        question['question_criteria'] = question_criteria
+        # text_materials = self._generate_text_materials(facts)
+        # maked = self._make_question(text_materials, question_criteria['difficulty'])
+        # question.update(maked)
 
         return question
 
-        # question = {
-        #     'type': 'SCQ',
-        #     'stem': 'The question stem',
-        #     'options': ['option1', 'option2', 'option3', 'option4'],
-        #     'answer': 1,
-        # }
-
-        # question['question_criteria'] = question_criteria
-        
-        # return question
 
     
     def choice_concept(self, concept_nodes):
@@ -187,7 +204,7 @@ class SingleChoiceGenerator(Agent):
         )
         return prompt    
 
-    def generate_question(self, source_sentences, difficulty):
+    def _make_question(self, source_sentences, difficulty):
         # Eddie
         # difficulty: 30, 50, 70
         # 丙：10分 for difficulty 30
@@ -218,22 +235,14 @@ class SingleChoiceGenerator(Agent):
         return queation
     
     
-    def generate_source_sentences(self, fact_nodes):
+    def _generate_text_materials(self, fact_nodes):
         return [
             "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
             "104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%",
             "基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用"
         ]
-    
-    
-    def retrieve_concept_nodes(self, subject, document, sections):
-        topic = Topic.TOPIC_CONCEPTS_QUERY.value
-        pcl = TextParcel({'kg_name': subject, 'document': document, 'sections': sections})
-        concepts = self._publish_sync(topic, pcl).content['concepts']
-        logger.debug(f"concepts: {', '.join(concepts[:10])}..")
-        return concepts
-    
-    
+
+
     def choice_fact_nodes(self, concept):
         facts = {
             "年份": ["104 年"],

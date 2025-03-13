@@ -32,7 +32,7 @@ class FileService(Agent):
 
     def on_connected(self):
         logger.info(f"subscribe: {FileService.TOPIC_FILE_UPLOAD}")
-        self._subscribe(FileService.TOPIC_FILE_UPLOAD, "str", self.handle_file_upload)
+        self.subscribe(FileService.TOPIC_FILE_UPLOAD, "str", self.handle_file_upload)
 
 
     def _generate_file_id(filename):        

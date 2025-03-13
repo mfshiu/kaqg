@@ -1,44 +1,39 @@
 # Required when executed as the main program.
 import os, sys
-
-from knowsys.knowledge_graph import KnowledgeGraph
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 ###
 
-from enum import Enum, auto, StrEnum
+from enum import StrEnum, auto
 import os
 import time
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
-import knowsys
 
 import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from knowsys.docker_management import DockerManager
-
-
-class Action(Enum):
-    def _generate_next_value_(name, start, count, last_values):
-        return name.lower()
-
-    TRIPLETS_ADD = auto()
-    CREATE = auto()
-    QUERY_CONCEPTS = auto()
-    QUERY_FACTS = auto()
-    QUERY_SECTIONS = auto()
+from knowsys.knowledge_graph import KnowledgeGraph
 
 
 
 class Topic(StrEnum):
-    TOPIC_CREATE = "Create/KGService/Services"
-    TOPIC_TRIPLETS_ADD = "AddTriplets/KGService/Services"
-    TOPIC_CONCEPTS_QUERY = "QueryConcepts/KGService/Services"
-    TOPIC_FACTS_QUERY = "QueryFacts/KGService/Services"
-    TOPIC_SECTIONS_QUERY = "QuerySections/KGService/Services"
+    def _generate_next_value_(name, start, count, last_values):
+        words = name.split('_')
+        formatted_name = ''.join(word.capitalize() for word in words)
+        return f"{formatted_name}/KGService/Services"
+    
+    
+    CREATE = auto()
+    ACCESS_POINT = auto()
+    TRIPLETS_ADD = auto()
+    CONCEPTS_QUERY = auto()
+    # FACTS_QUERY = auto()
+    SECTIONS_QUERY = auto()
+    
     
     
     
@@ -49,16 +44,6 @@ class KnowledgeGraphService(Agent):
         self.hostname = cfg['kg']['hostname']
         self.datapath = cfg['kg']['datapath']
         logger.info(f"Creating Docker container on host '{self.hostname}'\nwith data storage at '{self.datapath}'")    
-
-
-    @staticmethod
-    def get_topic(action:Action, kg_name):
-        if action == Action.TRIPLETS_ADD:
-            topic = f'{kg_name}/{Topic.TOPIC_TRIPLETS_ADD.value}'
-        else:
-            raise ValueError(f"Invalid action: {action}")
-        
-        return topic
     
     
     def on_activate(self):
@@ -66,28 +51,44 @@ class KnowledgeGraphService(Agent):
         self.all_kgs = self.docker_manager.list_KGs()
         logger.info(f"Existing KGs: {self.all_kgs}")
 
-        self._subscribe(Topic.TOPIC_CREATE.value, topic_handler=self.create_knowledge_graph)
-        self._subscribe(Topic.TOPIC_CONCEPTS_QUERY.value, topic_handler=self.query_concepts)
-        self._subscribe(Topic.TOPIC_FACTS_QUERY.value, topic_handler=self.query_facts)
-        self._subscribe(Topic.TOPIC_SECTIONS_QUERY, topic_handler=self.query_sections)
+        self.subscribe(Topic.CREATE.value, topic_handler=self.create_knowledge_graph)
+        self.subscribe(Topic.ACCESS_POINT.value, topic_handler=self.get_access_point)
+        
+        self.subscribe(Topic.CONCEPTS_QUERY.value, topic_handler=self.query_concepts)
+        # self.subscribe(Topic.FACTS_QUERY.value, topic_handler=self.query_facts)
+        self.subscribe(Topic.SECTIONS_QUERY.value, topic_handler=self.query_sections)
 
-        for kg_name in self.all_kgs:        
-            topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_name)
-            self._subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
+        for kg_name in self.all_kgs:
+            topic_triplets_add = f'{kg_name}/{Topic.TRIPLETS_ADD.value}'
+            self.subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
     
     
     def create_knowledge_graph(self, topic:str, pcl:TextParcel):
         kg_name = pcl.content['kg_name']
         http_url, bolt_url = self.docker_manager.create_container(kg_name)
 
-        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_name)
-        self._subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
+        topic_triplets_add = f'{kg_name}/{Topic.TRIPLETS_ADD.value}'
+        self.subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
 
         return {
             'kg_name': kg_name,
             'http_url': http_url,
             'bolt_url': bolt_url,
             'topic_triplets_add': topic_triplets_add,
+        }
+        
+        
+    def get_access_point(self, topic:str, pcl:TextParcel):
+        logger.debug(f"content: {pcl.content}")
+        # pcl.content: {
+                # 'kg_name': KG Name,
+        #     }
+        
+        kg_name = pcl.content['kg_name']
+        http_url, bolt_url = self.docker_manager.open_KG(kg_name)
+        return {
+            'http_url': http_url,
+            'bolt_url': bolt_url,
         }
         
         
@@ -103,58 +104,65 @@ class KnowledgeGraphService(Agent):
         _, bolt_url = self.docker_manager.open_KG(kg_name)
         # _, bolt_url = self.docker_manager.get_urls(kg_name)
         logger.info(f"bolt_url: {bolt_url}")
-        kg = KnowledgeGraph(uri=bolt_url, auth=('neo4j', '!Qazxsw2'))
-        data = pcl.content
-        kg.add_triplets(data['file_id'], data['page_number'], data['triplets'])
-        
+        with KnowledgeGraph(uri=bolt_url) as kg:
+            kg.add_triplets(pcl.content['file_id'], pcl.content['page_number'], pcl.content['triplets'])
+
 
     def query_concepts(self, topic:str, pcl:TextParcel):
         logger.debug(f"content: {pcl.content}")
         # pcl.content: {
-                # 'kg_name': kg_name,
-                # 'document': 'document name',
-                # 'sections': ['section1', 'section2'],
-        #     }
+            # 'kg_name': kg_name,
+            # 'document': 'document name',
+            # 'section': ['section1', 'section1-1'],
+        # }
         kg_name = pcl.content['kg_name']
         _, bolt_url = self.docker_manager.open_KG(kg_name)
-        logger.info(f"bolt_url: {bolt_url}")
-        kg = KnowledgeGraph(uri=bolt_url, auth=('neo4j', '!Qazxsw2'))
+        logger.verbose(f"bolt_url: {bolt_url}")
+        with KnowledgeGraph(uri=bolt_url) as kg:
+            document = kg.query_nodes_by_name(pcl.content['document'], 'document')[0]
+            logger.debug(f"document: {document}")
+            sections = kg.query_subsections(pcl.content['document'], pcl.content['section'])
+            logger.debug(f"sections: {sections}")
 
-        data = pcl.content
-        parent_names = [data['document']] + data['sections']
-        return {'concepts': kg.query_concepts(parent_names)}
+            # Use a dictionary to store unique concepts based on their element_id
+            unique_concepts = {concept['element_id']: concept for concept in kg.query_nodes_related_by(document['element_id'], 'include_in', 'concept')}
+            for section in sections:
+                for concept in kg.query_nodes_related_by(section['element_id'], 'include_in', 'concept'):
+                    unique_concepts[concept['element_id']] = concept  # Ensures uniqueness
+                    
+        concepts = list(unique_concepts.values())
+        logger.debug(f"concepts: {concepts[:10]}..")
+
+        return {'concepts': concepts}
 
 
     def query_facts(self, topic:str, pcl:TextParcel):
-        pass
+        logger.debug(f"content: {pcl.content}")
+        # pcl.content: {
+                # 'kg_name': kg_name,
+                # 'concept': {concept_node},
+        #     }
+        kg_name = pcl.content['kg_name']
+        _, bolt_url = self.docker_manager.open_KG(kg_name)
+        logger.verbose(f"bolt_url: {bolt_url}")
+        with KnowledgeGraph(uri=bolt_url) as kg:
+            concept = pcl.content['concept']
+            return {'facts': kg.query_facts(concept['element_id'])}
 
 
     def query_sections(self, topic:str, pcl:TextParcel):
-        conditions:dict = pcl.content
-        kg = knowsys.get_knowledge_graph(conditions['kg_name'])
-        
-        query_result = kg.query("MATCH (n:Structure) RETURN id(n) AS id, n.name AS name")
-        nodes = {record['id']: {'name': record.get('name', None)} for record in query_result}
-        
-        query_result = kg.query("""MATCH (a:Structure)-[r]->(b:Structure) RETURN 
-                                id(r) AS id, 
-                                type(r) AS type, 
-                                id(a) AS start_node, 
-                                id(b) AS end_node""")
-        relationships = [
-            {
-                'id': record['id'],
-                'type': record['type'],
-                'start_node': record['start_node'],
-                'end_node': record['end_node']
-            }
-            for record in query_result
-        ]
-        
-        return {
-            'nodes': nodes,  # Index nodes by ID for fast lookup
-            'relationships': relationships
-        }
+        logger.debug(f"content: {pcl.content}")
+        # pcl.content: {
+                # 'kg_name': kg_name,
+                # 'document': 'document name',
+                # 'section': 'section name',
+        #     }
+        data = pcl.content
+
+        _, bolt_url = self.docker_manager.open_KG(data['kg_name'])
+        logger.verbose(f"bolt_url: {bolt_url}")
+        with KnowledgeGraph(uri=bolt_url) as kg:
+            return {'sections': kg.query_subsections(data['document'], data['section'])}
 
 
 if __name__ == '__main__':
@@ -167,13 +175,13 @@ if __name__ == '__main__':
         def on_connected(self):
             time.sleep(2)
 
-            self._subscribe(self.agent_id)
+            self.subscribe(self.agent_id)
             
             pcl = TextParcel({
                 'kg': "Test",
                 }, topic_return=self.agent_id)
             logger.info(self.M(f"pcl: {pcl}"))
-            self._publish('0/' + Topic.TOPIC_TRIPLETS_ADD.value, pcl)
+            self.publish('0/' + Topic.TRIPLETS_ADD.value, pcl)
 
 
         def on_message(self, topic:str, pcl:TextParcel):

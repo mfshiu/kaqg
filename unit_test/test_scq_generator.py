@@ -1,24 +1,25 @@
-import sys
-import os
-sys.path.append(os.path.abspath(".."))  # Adjust path if necessary
-
+# Required when executed as the main program.
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import app_helper
+app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+###
 import time
 import unittest
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import Parcel
 from generation.scq_generator import SingleChoiceGenerator
-from unit_test.config_test import config_test
+from config_test import config_test
 
-
-from logging import Logger
-logger:Logger = __import__('wastepro').get_logger()
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 
 
 class AgentResponse(Agent):
     def on_connected(self):
-        self._subscribe('topic_1')
+        self.subscribe('topic_1')
     
     
     def on_message(self, topic:str, pcl:Parcel):
@@ -37,20 +38,23 @@ class TestAgent(unittest.TestCase):
             self.generated_question = None
 
 
-        def on_connected(self):
+        def on_activate(self):
             time.sleep(1)   # Waiting for other agents to start.
             
             topic_return = f'{self.agent_id}/SCQ_TEST'
-            self._subscribe(topic_return)
+            self.subscribe(topic_return)
 
             question_criteria = {
                 'question_id': 'Q101',              # 使用者自訂題目 ID
-                'section': ['chapter1', 'ch1-1'],   # 指定章節
+                'subject':  'W0301',                # 科目編碼
+                'document': 'Wastepro02',           # 教材名稱
+                # 'section': ['貳、廢棄物清理專業技術人員相關法規及其職掌', '一、廢棄物清理專業技術人員所涉相關法規'],   # 指定章節
+                'section': ['貳、廢棄物清理專業技術人員相關法規及其職掌'],   # 指定章節
                 'difficulty': 50,                   # 難度 30, 50, 70
             }
             pcl = Parcel.from_content(question_criteria)
             pcl.topic_return = topic_return
-            self._publish(SingleChoiceGenerator.TOPIC_CREATE, pcl)
+            self.publish(SingleChoiceGenerator.TOPIC_CREATE, pcl)
             
             
         def on_message(self, topic: str, pcl:Parcel):
@@ -73,7 +77,7 @@ class TestAgent(unittest.TestCase):
 
 
     def test_1(self):
-        time.sleep(3)
+        time.sleep(20)
 
         try:
             self._do_test_1()
