@@ -352,6 +352,10 @@ class KnowledgeGraph:
         return [self.serialize_node(sections[-1]) for sections in sectionss]
 
 
+    def session(self):
+        return self.driver.session()
+    
+
 if __name__ == "__main__":
     # 測試數據
     data = {

@@ -18,6 +18,7 @@ from services.kg_service import Topic
 from generation.ranker.node_ranker import NodeRanker
 from generation.ranker.simple_ranker import SimpleRanker
 from generation.ranker.weighted_ranker import WeightedRanker
+from knowsys.knowledge_graph import KnowledgeGraph
 
 
 
@@ -70,7 +71,8 @@ class SingleChoiceGenerator(Agent):
         qc = question_criteria
 
         # From question criteria to concepts
-        pcl = TextParcel({'kg_name': qc['subject'], 'document': qc['document'], 'section': qc['section']})
+        subject, document, section = qc['subject'], qc['document'], qc['section']
+        pcl = TextParcel({'kg_name': subject, 'document': document, 'section': section})
         concepts = self.publish_sync(Topic.CONCEPTS_QUERY.value, pcl).content['concepts']
         logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
         if not concepts:
@@ -78,23 +80,33 @@ class SingleChoiceGenerator(Agent):
             question['error'] = msg
             return question
 
-        # From concepts to core concept and fact nodes
-        ranker = SimpleRanker(self, qc['subject'], qc['document'], qc['section'])
+        # Generate text materials
+        ranker = SimpleRanker(self, subject, document, section)
         # ranker = WeightedRanker(self, qc['subject'], qc['document'], qc['section'])
-        core_concept = ranker.rank_concepts(concepts)
-        facts = ranker.rank_facts(core_concept)
-        logger.debug(f"facts: {', '.join([n['name'] for n in facts])}")
-        if not facts:
-            question['error'] = 'No facts found.'
+        text_materials = []
+        for _ in range(10):
+            core_concept = ranker.rank_concepts(concepts)
+            facts = ranker.rank_facts(core_concept)
+            logger.verbose(f"facts: {', '.join([n['name'] for n in facts])}")
+            if not facts:
+                continue
+
+            text_materials.extend(self._generate_text_materials(subject, facts))
+            if len(text_materials) >= 10:
+                break
+            
+        logger.debug(f"text_materials: {text_materials}")
+        if not text_materials:
+            logger.error(msg := f"No text materials found.")
+            question['error'] = msg
             return question
-
+        
+        # Make question
+        maked = self._make_question(text_materials, question_criteria['difficulty'])
+        question.update(maked)
         return self.test_return(question_criteria)
-        # From fact nodes to question
-        # text_materials = self._generate_text_materials(facts)
-        # maked = self._make_question(text_materials, question_criteria['difficulty'])
-        # question.update(maked)
 
-        return question
+        # return question
 
 
     
@@ -102,7 +114,7 @@ class SingleChoiceGenerator(Agent):
         return random.choice(concept_nodes)
     
     
-    def _get_one_weighted_combination(self,S):
+    def _get_one_weighted_combination(self, S):
         """
         隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
         每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
@@ -141,6 +153,7 @@ class SingleChoiceGenerator(Agent):
             "high_distractor_count": selected[6],
         }
         return result
+
 
     def _generate_prompt(self, parameters):
         """
@@ -204,7 +217,7 @@ class SingleChoiceGenerator(Agent):
         )
         return prompt    
 
-    def _make_question(self, source_sentences, difficulty):
+    def _make_question(self, text_materials, difficulty):
         # Eddie
         # difficulty: 30, 50, 70
         # 丙：10分 for difficulty 30
@@ -235,12 +248,49 @@ class SingleChoiceGenerator(Agent):
         return queation
     
     
-    def _generate_text_materials(self, fact_nodes):
-        return [
-            "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
-            "104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%",
-            "基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用"
-        ]
+    def _generate_text_materials(self, subject, fact_nodes):
+        def generate_text_from_paths(records):
+            """
+            從每個 record 取得路徑 (path)，
+            提取 (start_node)-[rel]->(end_node) 組成文字描述。
+            """
+            text_segments = set()
+            for record in records:
+                path = record["p"] 
+                for rel in path.relationships:
+                    start_node = rel.start_node
+                    end_node = rel.end_node
+                    
+                    s_id = start_node.get("name", "(unknown)") 
+                    e_id = end_node.get("name", "(unknown)") 
+                    r_type = rel.type
+                    text_segments.add(f"{s_id}{r_type}{e_id}")
+
+            texts = list(text_segments)
+            logger.verbose(f"text_segments: {texts}")
+            return texts
+
+
+        query = """
+            MATCH p = (start:fact)-[*1..1]-(other:fact)
+            WHERE elementId(start) = $start_element_id
+            RETURN p
+        """
+        pcl = TextParcel({'kg_name': subject})
+        bolt_url = self.publish_sync(Topic.ACCESS_POINT.value, pcl).content['bolt_url']
+        text_materials = []
+        with KnowledgeGraph(uri=bolt_url) as kg:
+            with kg.session() as session:
+                for fact in fact_nodes:
+                    results = session.run(query, start_element_id=fact['element_id'])
+                    text_materials.extend(generate_text_from_paths(results))
+                    
+        return text_materials
+        # return [
+        #     "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
+        #     "104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%",
+        #     "基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用"
+        # ]
 
 
     def choice_fact_nodes(self, concept):
