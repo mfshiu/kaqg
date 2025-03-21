@@ -1,5 +1,4 @@
 import os, sys
-import argparse
 from itertools import product
 import random
 from openai import OpenAI
