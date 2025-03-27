@@ -70,78 +70,78 @@ class FactConceptExtractor:
 
     def get_concept_n_fact(self, context):
         query_concept_and_fact =f'''
-    Please structure the following context into triplets. The context will be divided into two levels: fact and concept. A fact refers to all entities that can be found in the context, while a concept refers to the higher-level categories of those facts.
+Please structure the following context into triplets. The context will be divided into two levels: fact and concept. A fact refers to all entities that can be found in the context, while a concept refers to the higher-level categories of those facts.
 
-    For example:
-    "104 年全國各縣市焚化底渣產量約占焚化量之 15%，因其性質較無害，故為減少掩埋場負荷及推動資源回收再利用，環境部已提供經費補助，鼓勵縣市政府進行分選後供為營建替代級配材料再利用，目前基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用，經統計 104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%，其餘非採再利用部分則以掩埋方式進行最終處置。"
+For example:
+"104 年全國各縣市焚化底渣產量約占焚化量之 15%，因其性質較無害，故為減少掩埋場負荷及推動資源回收再利用，環境部已提供經費補助，鼓勵縣市政府進行分選後供為營建替代級配材料再利用，目前基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用，經統計 104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%，其餘非採再利用部分則以掩埋方式進行最終處置。"
 
-    This can be broken down into the following facts and concepts, and each fact need to be category as one concepts like result show in entity_hierarchy:
-    facts = [
-        "104 年",
-        "15%",
-        "89.3%",
-        "環境部",
-        "基隆市",
-        "臺北市",
-        "新北市",
-        "桃園市",
-        "新竹市",
-        "苗栗縣",
-        "臺中市",
-        "彰化縣",
-        "嘉義市",
-        "嘉義縣",
-        "臺南市",
-        "高雄市",
-        "屏東縣",
-        "焚化底渣",
-        "掩埋場",
-        "資源回收再利用",
-        "營建替代級配材料",
-        "焚化廠",
-        "一般廢棄物",
-        "底渣",
-        "分選",
-        "再利用",
-        "掩埋",
-        "最終處置"]
+This can be broken down into the following facts and concepts, and each fact need to be category as one concepts like result show in entity_hierarchy:
+facts = [
+    "104 年",
+    "15%",
+    "89.3%",
+    "環境部",
+    "基隆市",
+    "臺北市",
+    "新北市",
+    "桃園市",
+    "新竹市",
+    "苗栗縣",
+    "臺中市",
+    "彰化縣",
+    "嘉義市",
+    "嘉義縣",
+    "臺南市",
+    "高雄市",
+    "屏東縣",
+    "焚化底渣",
+    "掩埋場",
+    "資源回收再利用",
+    "營建替代級配材料",
+    "焚化廠",
+    "一般廢棄物",
+    "底渣",
+    "分選",
+    "再利用",
+    "掩埋",
+    "最終處置"]
 
-    concepts = [
-        "年份",
-        "百分比",
-        "政府機構",
-        "城市",
-        "縣",
-        "廢棄物",
-        "設施",
-        "廢棄物管理",
-        "建材",
-        "廢棄物處理"]
-        
-    entity_hierarchy = {{
-                        "年份": ["104 年"],
-                        "百分比": ["15%", "89.3%"],
-                        "政府機構": ["環境部"],
-                        "城市": [
-                            "基隆市", "臺北市", "新北市", "桃園市", "新竹市",
-                            "臺中市", "嘉義市", "臺南市", "高雄市"
-                        ],
-                        "縣": ["苗栗縣", "彰化縣", "嘉義縣", "屏東縣"],
-                        "廢棄物": ["焚化底渣", "一般廢棄物", "底渣"],
-                        "設施": ["掩埋場", "焚化廠"],
-                        "廢棄物管理": ["資源回收再利用"],
-                        "建材": ["營建替代級配材料"],
-                        "廢棄物處理": ["分選", "再利用", "掩埋", "最終處置"]
-                        }}
-    please following the rule as above and help me to extract the facts and concept from new context following the output format.
-    # context:
-    {context}
-    Following the output format as below is very important do not return any context just output.
-    # output format:
-    facts = []
-    concepts = []
-    entity_hierarchy = {{concept1:[fact_a, fact_b]}}
-    '''
+concepts = [
+    "年份",
+    "百分比",
+    "政府機構",
+    "城市",
+    "縣",
+    "廢棄物",
+    "設施",
+    "廢棄物管理",
+    "建材",
+    "廢棄物處理"]
+    
+entity_hierarchy = {{
+                    "年份": ["104 年"],
+                    "百分比": ["15%", "89.3%"],
+                    "政府機構": ["環境部"],
+                    "城市": [
+                        "基隆市", "臺北市", "新北市", "桃園市", "新竹市",
+                        "臺中市", "嘉義市", "臺南市", "高雄市"
+                    ],
+                    "縣": ["苗栗縣", "彰化縣", "嘉義縣", "屏東縣"],
+                    "廢棄物": ["焚化底渣", "一般廢棄物", "底渣"],
+                    "設施": ["掩埋場", "焚化廠"],
+                    "廢棄物管理": ["資源回收再利用"],
+                    "建材": ["營建替代級配材料"],
+                    "廢棄物處理": ["分選", "再利用", "掩埋", "最終處置"]
+                    }}
+please following the rule as above and help me to extract the facts and concept from new context following the output format.
+# context:
+{context}
+Following the output format as below is very important do not return any context just output.
+# output format:
+facts = []
+concepts = []
+entity_hierarchy = {{concept1:[fact_a, fact_b]}}
+'''
         answer_concept_and_fact = self.chat(message=query_concept_and_fact)
         answer_concept_and_fact = ''.join(answer_concept_and_fact)
         answer_concept_and_fact = re.sub(r'\s+', ' ', answer_concept_and_fact)
@@ -169,12 +169,12 @@ answer_concept_and_fact:
 
     def get_aliases(self, aliases_keys):
         query_get_aliases = f'''
-                            Please provide me with the aliases for each item in the array mentioned below. The aliases must be in English. Return them in the format of a dictionary, without including any additional context outside of the dictionary. It is very important to answer all of th items within array.
-                            # array:
-                            {aliases_keys}
-                            # example:
-                            {{"申請書": ["application form","formulario de solicitud"]}}
-                            '''
+Please provide me with the aliases for each item in the array mentioned below. The aliases must be in English. Return them in the format of a dictionary, without including any additional context outside of the dictionary. It is very important to answer all of th items within array.
+# array:
+{aliases_keys}
+# example:
+{{"申請書": ["application form","formulario de solicitud"]}}
+'''
         answer_get_aliases = self.chat(message=query_get_aliases)
         answer_get_aliases = ''.join(answer_get_aliases)
         answer_get_aliases = re.sub(r'\s+', ' ', answer_get_aliases).replace(' ', '')

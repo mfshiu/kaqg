@@ -1,12 +1,13 @@
 # Required when executed as the main program.
 import os, sys
 
-import test
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 ###
 
+from itertools import product
+import json
 import random
 
 import logging
@@ -15,6 +16,7 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
 from services.kg_service import Topic
+from services.llm_service import LlmService
 from generation.ranker.node_ranker import NodeRanker
 from generation.ranker.simple_ranker import SimpleRanker
 from generation.ranker.weighted_ranker import WeightedRanker
@@ -104,17 +106,15 @@ class SingleChoiceGenerator(Agent):
         # Make question
         maked = self._make_question(text_materials, question_criteria['difficulty'])
         question.update(maked)
-        return self.test_return(question_criteria)
-
-        # return question
-
+        return question
+        # return self.test_return(question_criteria)
 
     
     def choice_concept(self, concept_nodes):
         return random.choice(concept_nodes)
     
     
-    def _get_one_weighted_combination(self, S):
+    def _get_weighted_combination(self, score):
         """
         隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
         每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
@@ -124,98 +124,120 @@ class SingleChoiceGenerator(Agent):
         - high_distractor_count：1.2
         - 其他特徵：1
 
-        :param S: 目標總分
+        :param score: 目標總分
         :return: 一組符合條件的參數組合，對應七個具體描述
         """
-        # 定義各參數的權重  
-        weights = [1, 1, 1.5, 1, 1, 1, 1.2]
         
+        weights = [1, 1, 1.5, 1, 1, 1, 1.2] # 定義各參數的權重  
+        down_score, up_score = score - 1, score + 1
+        if up_score < (sw:=sum(weights)) or down_score > sw * 3:
+            return [0] * 7
+        
+        all_comnination = list(product(range(1, 4), repeat=7))
+        random.shuffle(all_comnination)
+
         # 篩選符合條件的組合
-        valid_combinations = []
-        for combination in product(range(1, 4), repeat=7):
+        valid_combination = None
+        for combination in all_comnination:
             weighted_sum = sum(x * w for x, w in zip(combination, weights))
-            if S - 1 <= weighted_sum <= S + 1:
-                valid_combinations.append(combination)
-        
-        # 若無符合條件的組合，返回 None
-        if not valid_combinations:
-            return None
+            if down_score <= weighted_sum <= up_score:
+                valid_combination = combination
+                break
 
-        # 隨機選取一組並命名參數
-        selected = random.choice(valid_combinations)
-        result = {
-            "stem_length": selected[0],
-            "stem_technical_term_density": selected[1],
-            "stem_cognitive_level": selected[2],
-            "option_average_length": selected[3],
-            "option_similarity": selected[4],
-            "stem_option_similarity": selected[5],
-            "high_distractor_count": selected[6],
-        }
-        return result
+        keys = [
+            "stem_length",
+            "stem_technical_term_density",
+            "stem_cognitive_level",
+            "option_average_length",
+            "option_similarity",
+            "stem_option_similarity",
+            "high_distractor_count",
+        ]
+
+        return dict(zip(keys, valid_combination))
 
 
-    def _generate_prompt(self, parameters):
+    def _generate_features_prompt(self, combination):
         """
-        根據參數分數和特徵表，自動生成出題敘述。
-        
-        :param parameters: 包含 7 個特徵的分數，格式為字典
-        :return: 題目敘述
+        Automatically generates a question description based on parameter scores and feature table.
+        :param parameters: A dictionary containing scores for 7 features
+        :return: Question description
         """
-        # 定義參數範圍對應描述
-        stem_length_desc = {
-            "high": "題幹字數較長（超過 20 字）",
-            "medium": "題幹字數中等（15 至 35 字之間）",
-            "low": "題幹字數較短（10 至 25 字）"
+        descs = [
+            ["Short stem length (10 to 25 characters)", "Medium stem length (15 to 35 characters)", "Long stem length (over 20 characters)"],
+            ["Few or no technical terms in stem (0 to 2 terms)", "Moderate number of technical terms in stem (2 to 4 terms)", "Many technical terms in stem (more than 3 terms)"],
+            ["Only requires memorization of knowledge points", "Requires understanding and synthesis of knowledge points", "Requires analysis, synthesis, or evaluation"],
+            ["Short option text (1 to 5 characters)", "Medium option text (3 to 8 characters)", "Long option text (more than 5 characters)"],
+            ["Low similarity between options (below 30%)", "Moderate similarity between options (around 45%)", "High similarity between options (above 60%)"],
+            ["Low relevance between stem and options (below 30%)", "Moderate relevance between stem and options (around 45%)", "High relevance between stem and options (above 60%)"],
+            ["Includes 1 highly attractive distractor", "Includes 2 highly attractive distractors", "Includes more than 3 highly attractive distractors"]
+        ]
+        keys = [
+            "stem_length",
+            "stem_technical_term_density",
+            "stem_cognitive_level",
+            "option_average_length",
+            "option_similarity",
+            "stem_option_similarity",
+            "high_distractor_count"
+        ]
+        titles = [
+            "Stem Length",
+            "Technical Term Density in Stem",
+            "Cognitive Level",
+            "Average Option Length",
+            "Option Similarity",
+            "Stem-Option Similarity",
+            "Number of High-Attraction Distractors"
+        ]
+
+        prompt = (f'{titles[i]}: {descs[i][combination[keys[i]] - 1]}' for i in range(7))
+        return prompt
+
+
+    def _chat(self, prompt_text):
+        messages = [
+            {"role": "system", "content": "You are a helpful exam question generator. 你所建立的題目為單選題，答案只有一個。 Please provide your response with 繁體中文 in JSON format."},
+            {"role": "user", "content": f"{prompt_text}\nPlease provide your response in JSON format."}
+        ]
+        
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "generate_question",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "stem": {"type": "string"},
+                        "option_A": {"type": "string"},
+                        "option_B": {"type": "string"},
+                        "option_C": {"type": "string"},
+                        "option_D": {"type": "string"},
+                        "answer": {"type": "string"},
+                    },
+
+                    "required": [
+                        "stem",
+                        "option_A",
+                        "option_B",
+                        "option_C",
+                        "option_D",
+                        "answer"
+                    ],
+                    "additionalProperties": False
+                }
+            }
         }
 
-        technical_term_density_desc = {
-            "high": "題幹使用了較多專業術語（3 個以上）",
-            "medium": "題幹有適當的專業術語（2 至 4 個）",
-            "low": "題幹使用較少或無專業術語（0 至 2 個）"
+        params = {
+            'messages': messages,
+            'response_format': response_format,
         }
+        
+        pcl = TextParcel(params)
+        question = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
+        return json.loads(question.content['response'])
 
-        cognitive_level_desc = {
-            "high": "需進行分析、綜合或評估",
-            "medium": "涉及知識點的理解與綜合",
-            "low": "僅需記憶知識點"
-        }
-
-        option_length_desc = {
-            "high": "選項文字較長（5 字以上）",
-            "medium": "選項文字中等（3 至 8 字之間）",
-            "low": "選項文字較短（1 至 5 字）"
-        }
-
-        option_similarity_desc = {
-            "high": "選項間有較高相似度（60% 以上）",
-            "medium": "選項間相似度適中（45% 左右）",
-            "low": "選項間相似度較低（30% 以下）"
-        }
-
-        stem_option_similarity_desc = {
-            "high": "題幹與選項內容高度相關（60% 以上）",
-            "medium": "題幹與選項內容相關性適中（45% 左右）",
-            "low": "題幹與選項內容相關性較低（30% 以下）"
-        }
-
-        high_distractor_count_desc = {
-            "high": "包含 3 個以上的高誘答選項",
-            "medium": "包含 2 個高誘答選項",
-            "low": "包含 1 個高誘答選項"
-        }
-
-        # 根據參數生成對應敘述
-        prompt = (
-            f"題幹字數：{stem_length_desc['high' if parameters['stem_length'] == 3 else 'medium' if parameters['stem_length'] == 2 else 'low']}；\n"
-            f"題幹專業詞密度：{technical_term_density_desc['high' if parameters['stem_technical_term_density'] == 3 else 'medium' if parameters['stem_technical_term_density'] == 2 else 'low']}；\n"
-            f"認知程度：{cognitive_level_desc['high' if parameters['stem_cognitive_level'] == 3 else 'medium' if parameters['stem_cognitive_level'] == 2 else 'low']}；\n"
-            f"選項平均字數：{option_length_desc['high' if parameters['option_average_length'] == 3 else 'medium' if parameters['option_average_length'] == 2 else 'low']}；\n"
-            f"選項間相似度：{option_similarity_desc['high' if parameters['option_similarity'] == 3 else 'medium' if parameters['option_similarity'] == 2 else 'low']}；\n"
-            f"題幹與選項相似度：{stem_option_similarity_desc['high' if parameters['stem_option_similarity'] == 3 else 'medium' if parameters['stem_option_similarity'] == 2 else 'low']}；\n"
-            f"高誘答選項數：{high_distractor_count_desc['high' if parameters['high_distractor_count'] == 3 else 'medium' if parameters['high_distractor_count'] == 2 else 'low']}。"
-        )
-        return prompt    
 
     def _make_question(self, text_materials, difficulty):
         # Eddie
@@ -234,18 +256,31 @@ class SingleChoiceGenerator(Agent):
         }
         
         score = difficulty_mapping[difficulty]
-        combination = self._get_one_weighted_combination(score)
-        prompt = self._generate_prompt(combination)
+        combination = self._get_weighted_combination(score)
+        features = self._generate_features_prompt(combination)
         
-        # 生成題目
-        queation = {
-            'type': 'SCQ',
-            'stem': 'The question stem',
-            'options': ['option1', 'option2', 'option3', 'option4'],
-            'answer': 1,
-            # 'question_criteria': question_criteria
-        }
-        return queation
+        prompt_text =  f"""
+You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
+1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
+2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
+3.Do not provide explanations or analysis of the questions or answers.
+4.Output the result in a table format with the following headers:
+    - Stem
+    - Option A
+    - Option B
+    - Option C
+    - Option D
+    - Answer (only indicate the correct option: A, B, C, or D).
+
+Features:
+{features}
+
+Text:
+{text_materials}
+"""
+        question = self._chat(prompt_text)
+        logger.info(f"type:{type(question)}, question: {question}")
+        return question
     
     
     def _generate_text_materials(self, subject, fact_nodes):
@@ -284,7 +319,7 @@ class SingleChoiceGenerator(Agent):
                 for fact in fact_nodes:
                     results = session.run(query, start_element_id=fact['element_id'])
                     text_materials.extend(generate_text_from_paths(results))
-                    
+
         return text_materials
         # return [
         #     "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
