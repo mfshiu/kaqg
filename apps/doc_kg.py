@@ -26,6 +26,7 @@ class ExecutionAgent(Agent):
         self.file_path = config['file_path']
         self.toc = toc  
         
+        
     def _ingest_document(self):
         self.subscribe(PdfRetriever.TOPIC_RETRIEVED)
         

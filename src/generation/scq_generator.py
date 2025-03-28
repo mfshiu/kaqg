@@ -67,7 +67,7 @@ class SingleChoiceGenerator(Agent):
 
 
     def _generate_question(self, question_criteria):
-        question = {
+        assessment = {
             'question_criteria': question_criteria,
         }
         qc = question_criteria
@@ -79,8 +79,8 @@ class SingleChoiceGenerator(Agent):
         logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
         if not concepts:
             logger.error(msg := f"No concepts found.")
-            question['error'] = msg
-            return question
+            assessment['error'] = msg
+            return assessment
 
         # Generate text materials
         ranker = SimpleRanker(self, subject, document, section)
@@ -100,13 +100,14 @@ class SingleChoiceGenerator(Agent):
         logger.debug(f"text_materials: {text_materials}")
         if not text_materials:
             logger.error(msg := f"No text materials found.")
-            question['error'] = msg
-            return question
+            assessment['error'] = msg
+            return assessment
         
         # Make question
         maked = self._make_question(text_materials, question_criteria['difficulty'])
-        question.update(maked)
-        return question
+        # assessment.update(maked)
+        assessment['question'] = maked
+        return assessment
         # return self.test_return(question_criteria)
 
     
@@ -239,6 +240,34 @@ class SingleChoiceGenerator(Agent):
         return json.loads(question.content['response'])
 
 
+    def __shuffle_question(self, question):
+        # Extract original options
+        original_options = {
+            "A": question["option_A"],
+            "B": question["option_B"],
+            "C": question["option_C"],
+            "D": question["option_D"]
+        }
+        correct_answer_text = original_options[question["answer"]]
+
+        # Shuffle options
+        shuffled_items = list(original_options.items())
+        random.shuffle(shuffled_items)
+
+        # Build new question structure
+        new_question = {
+            "stem": question["stem"]
+        }
+
+        for idx, (_, text) in enumerate(shuffled_items):
+            key = chr(ord("A") + idx)
+            new_question[f"option_{key}"] = text
+            if text == correct_answer_text:
+                correct_new_key = key
+
+        new_question["answer"] = correct_new_key
+        return new_question
+
     def _make_question(self, text_materials, difficulty):
         # Eddie
         # difficulty: 30, 50, 70
@@ -280,7 +309,7 @@ Text:
 """
         question = self._chat(prompt_text)
         logger.info(f"type:{type(question)}, question: {question}")
-        return question
+        return self.__shuffle_question(question)
     
     
     def _generate_text_materials(self, subject, fact_nodes):
