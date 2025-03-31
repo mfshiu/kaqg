@@ -15,11 +15,10 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
-from services.kg_service import Topic as KgTopic
+from services.kg_service import Topic
 from services.llm_service import LlmService
 
 from evaluation.features import ScqFeatures
-from evaluation.scq_evaluator import ScqEvaluator
 from generation.ranker.node_ranker import NodeRanker
 from generation.ranker.simple_ranker import SimpleRanker
 from generation.ranker.weighted_ranker import WeightedRanker
@@ -27,60 +26,65 @@ from knowsys.knowledge_graph import KnowledgeGraph
 
 
 
-class SingleChoiceGenerator(Agent):
-    TOPIC_CREATE = "Create/SCQ/Generation"
+class ScqEvaluator(Agent):
+    TOPIC_EVALUATE = "Evaluate/SCQ/Evaluation"
 
 
     def __init__(self, config:dict):
-        logger.info(f"config: {config}")
-        super().__init__(name='scq.generation.wp', agent_config=config)
+        logger.debug(f"config: {config}")
+        super().__init__(name='scq.evaluation.wp', agent_config=config)
 
 
     def on_activate(self):
         logger.verbose(f"on_activate")
-        self.subscribe(SingleChoiceGenerator.TOPIC_CREATE, topic_handler=self.handle_create)
+        self.subscribe(ScqEvaluator.TOPIC_EVALUATE, topic_handler=self.handle_evaluate)
 
 
-    def handle_create(self, topic, pcl:TextParcel):
-        # question_criteria = {
-        #     'question_id': 'Q101',              # 使用者自訂題目 ID
-        #     'subject':  'Subject Name',         # 科目名稱
-        #     'document': 'Book Name',            # 教材名稱
-        #     'section': ['chapter1', 'ch1-1'],   # 指定章節
-        #     'difficulty': 50,                   # 難度 30, 50, 70
+    def handle_evaluate(self, topic, pcl:TextParcel):
+        # Example of pcl.content:
+        # {
+        #     "question_criteria": {
+        #         "question_id": "Q1743158893",
+        #         "subject": "W0301",
+        #         "section": [
+        #             "貳、廢棄物清理專業技術人員相關法規及其職掌"
+        #         ],
+        #         "document": "Wastepro02",
+        #         "difficulty": 50
+        #     },
+            # "question": {
+            #     "stem": "根據環境保護專責及技術人員訓練管理辦法，情節嚴重的違規行為應依據哪一條款處理？",
+            #     "option_A": "第30條第3款",
+            #     "option_B": "第15條第1款",
+            #     "option_C": "第26條第4款",
+            #     "option_D": "第10條第2款",
+            #     "answer": "C"
+            # }
         # }
-        question_criteria = pcl.content
-        logger.debug(f"question_criteria: {question_criteria}")
+        assessment = pcl.content
+        logger.debug(f"assessment: {assessment}")
         
-        generated = self.generate_question(question_criteria)
-        while not self.evaluate_question(generated):
-            generated = self.generate_question(question_criteria)
+        evaluated = self.evaluate(assessment)
 
-        logger.debug(f"generated_question: {generated}")
-        return generated
+        logger.debug(f"evaluated result: {evaluated}")
+        return evaluated
     
     
-    def test_return(self, question_criteria):
-        question = {
-            'type': 'SCQ',
-            'stem': 'The question stem',
-            'options': ['option1', 'option2', 'option3', 'option4'],
-            'answer': 1,
-            'question_criteria': question_criteria
-        }
-        return question
+    def get_test_result(self, assessment):
+        feature_grades = {key: random.randint(1, 3) for key in ScqFeatures.keys}
+        assessment['features'] = feature_grades
+        
+        return assessment
 
 
-    def generate_question(self, question_criteria):
-        assessment = {
-            'question_criteria': question_criteria,
-        }
-        qc = question_criteria
+    def evaluate(self, assessment):
+        return self.get_test_result(assessment)
+        qc = assessment['question_criteria']
 
         # From question criteria to concepts
         subject, document, section = qc['subject'], qc['document'], qc['section']
         pcl = TextParcel({'kg_name': subject, 'document': document, 'section': section})
-        concepts = self.publish_sync(KgTopic.CONCEPTS_QUERY.value, pcl).content['concepts']
+        concepts = self.publish_sync(Topic.CONCEPTS_QUERY.value, pcl).content['concepts']
         logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
         if not concepts:
             logger.error(msg := f"No concepts found.")
@@ -117,71 +121,7 @@ class SingleChoiceGenerator(Agent):
 
     
     def evaluate_question(self, assessment):
-        logger.verbose(f"assessment: {assessment}")
-        
-        prompt_text = f"""
-I have a Single Choice Question (SCQ) in the following JSON structure:
-
-{
-  "stem": "Your question text",
-  "option_A": "Option A text",
-  "option_B": "Option B text",
-  "option_C": "Option C text",
-  "option_D": "Option D text",
-  "answer": "Correct answer letter"
-}
-
-Please evaluate this SCQ according to the feature keys and levels below. Then, provide **only** the final evaluation result in JSON format (e.g., {"stem_length": 1, "stem_technical_term_density": 2, ...}), with no additional text or explanation.
-
-**Feature Keys and Levels**:
-
-1. **stem_technical_term_density**
-   - 1: Few or no technical terms (0 to 2 terms)
-   - 2: Moderate number of technical terms (2 to 4 terms)
-   - 3: Many technical terms (more than 3 terms)
-
-2. **stem_cognitive_level**
-   - 1: Only requires memorization of knowledge points
-   - 2: Requires understanding and synthesis
-   - 3: Requires analysis, synthesis, or evaluation
-
-3. **option_average_length**
-   - 1: Short option text (1 to 5 characters)
-   - 2: Medium option text (3 to 8 characters)
-   - 3: Long option text (more than 5 characters)
-
-4. **option_similarity**
-   - 1: Low similarity between options (below 30%)
-   - 2: Moderate similarity (around 45%)
-   - 3: High similarity (above 60%)
-
-5. **stem_option_similarity**
-   - 1: Low relevance between stem and options (below 30%)
-   - 2: Moderate relevance (around 45%)
-   - 3: High relevance (above 60%)
-
-6. **high_distractor_count**
-   - 1: Includes 1 highly attractive distractor
-   - 2: Includes 2 highly attractive distractors
-   - 3: Includes more than 3 highly attractive distractors
-
-**Instructions**:
-1. Read the SCQ from the JSON input.
-2. Evaluate each of the seven features using the guidelines above.
-3. Output the result in JSON format using the exact keys shown, e.g.:
-   {
-     "stem_technical_term_density": 2,
-     "stem_cognitive_level": 3,
-     "option_average_length": 1,
-     ...
-   }
-
-No additional explanation or text is needed—only the evaluation JSON.
-"""
-
-        evaluated = self.publish_sync(ScqEvaluator.TOPIC_EVALUATE, TextParcel(assessment))
-        logger.debug(f"evaluated: {evaluated}")
-        
+        logger.debug(f"assessment: {assessment}")
         return not assessment.get('error') and assessment.get('question')
         
         
@@ -219,7 +159,17 @@ No additional explanation or text is needed—only the evaluation JSON.
                 valid_combination = combination
                 break
 
-        return dict(zip(ScqFeatures.keys, valid_combination))
+        keys = [
+            "stem_length",
+            "stem_technical_term_density",
+            "stem_cognitive_level",
+            "option_average_length",
+            "option_similarity",
+            "stem_option_similarity",
+            "high_distractor_count",
+        ]
+
+        return dict(zip(keys, valid_combination))
 
 
     def _generate_features_prompt(self, combination):
@@ -228,9 +178,33 @@ No additional explanation or text is needed—only the evaluation JSON.
         :param parameters: A dictionary containing scores for 7 features
         :return: Question description
         """
-        keys = ScqFeatures.keys
-        titles = ScqFeatures.titles
-        descs = ScqFeatures.level_descriptions
+        descs = [
+            ["Short stem length (10 to 25 characters)", "Medium stem length (15 to 35 characters)", "Long stem length (over 20 characters)"],
+            ["Few or no technical terms in stem (0 to 2 terms)", "Moderate number of technical terms in stem (2 to 4 terms)", "Many technical terms in stem (more than 3 terms)"],
+            ["Only requires memorization of knowledge points", "Requires understanding and synthesis of knowledge points", "Requires analysis, synthesis, or evaluation"],
+            ["Short option text (1 to 5 characters)", "Medium option text (3 to 8 characters)", "Long option text (more than 5 characters)"],
+            ["Low similarity between options (below 30%)", "Moderate similarity between options (around 45%)", "High similarity between options (above 60%)"],
+            ["Low relevance between stem and options (below 30%)", "Moderate relevance between stem and options (around 45%)", "High relevance between stem and options (above 60%)"],
+            ["Includes 1 highly attractive distractor", "Includes 2 highly attractive distractors", "Includes more than 3 highly attractive distractors"]
+        ]
+        keys = [
+            "stem_length",
+            "stem_technical_term_density",
+            "stem_cognitive_level",
+            "option_average_length",
+            "option_similarity",
+            "stem_option_similarity",
+            "high_distractor_count"
+        ]
+        titles = [
+            "Stem Length",
+            "Technical Term Density in Stem",
+            "Cognitive Level",
+            "Average Option Length",
+            "Option Similarity",
+            "Stem-Option Similarity",
+            "Number of High-Attraction Distractors"
+        ]
 
         prompt = (f'{titles[i]}: {descs[i][combination[keys[i]] - 1]}' for i in range(7))
         return prompt
@@ -381,7 +355,7 @@ Text:
             RETURN p
         """
         pcl = TextParcel({'kg_name': subject})
-        bolt_url = self.publish_sync(KgTopic.ACCESS_POINT.value, pcl).content['bolt_url']
+        bolt_url = self.publish_sync(Topic.ACCESS_POINT.value, pcl).content['bolt_url']
         text_materials = []
         with KnowledgeGraph(uri=bolt_url) as kg:
             with kg.session() as session:
@@ -399,6 +373,6 @@ Text:
 
 
 if __name__ == '__main__':
-    agent = SingleChoiceGenerator(app_helper.get_agent_config())
+    agent = ScqEvaluator(app_helper.get_agent_config())
     agent.start_process()
     app_helper.wait_agent(agent)
