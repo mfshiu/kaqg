@@ -77,47 +77,20 @@ class ScqEvaluator(Agent):
         return assessment
 
 
+    def _evaluate_1(self, assessment):
+        return random.randint(1, 3)
+    
+
+    def _evaluate_2_to_7(self, assessment):
+        return {key: random.randint(1, 3) for key in ScqFeatures.keys[1:]}
+
+
     def evaluate(self, assessment):
-        return self.get_test_result(assessment)
-        qc = assessment['question_criteria']
+        feature_grades = {}
+        feature_grades[ScqFeatures.keys[0]] = self._evaluate_1(assessment)
+        feature_grades.update(self._evaluate_2_to_7(assessment))
 
-        # From question criteria to concepts
-        subject, document, section = qc['subject'], qc['document'], qc['section']
-        pcl = TextParcel({'kg_name': subject, 'document': document, 'section': section})
-        concepts = self.publish_sync(Topic.CONCEPTS_QUERY.value, pcl).content['concepts']
-        logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
-        if not concepts:
-            logger.error(msg := f"No concepts found.")
-            assessment['error'] = msg
-            return assessment
-
-        # Generate text materials
-        ranker = SimpleRanker(self, subject, document, section)
-        # ranker = WeightedRanker(self, qc['subject'], qc['document'], qc['section'])
-        text_materials = []
-        for _ in range(10):
-            core_concept = ranker.rank_concepts(concepts)
-            facts = ranker.rank_facts(core_concept)
-            logger.verbose(f"facts: {', '.join([n['name'] for n in facts])}")
-            if not facts:
-                continue
-
-            text_materials.extend(self._generate_text_materials(subject, facts))
-            if len(text_materials) >= 10:
-                break
-            
-        logger.debug(f"text_materials: {text_materials}")
-        if not text_materials:
-            logger.error(msg := f"No text materials found.")
-            assessment['error'] = msg
-            return assessment
-        
-        # Make question
-        maked = self._make_question(text_materials, question_criteria['difficulty'])
-        
-        assessment['question'] = maked
-        return assessment
-        # return self.test_return(question_criteria)
+        return feature_grades
 
     
     def evaluate_question(self, assessment):

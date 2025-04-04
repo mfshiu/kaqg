@@ -210,3 +210,12 @@ class ColorFormatter(logging.Formatter):
         color = self.LEVEL_COLORS.get(level_char, Fore.WHITE)
         message = super().format(record)
         return f"{color}{message}{Style.RESET_ALL}"
+
+
+def check_directory_accessible(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Path '{path}' does not exist.")
+    if not os.path.isdir(path):
+        raise NotADirectoryError(f"Path '{path}' is not a directory.")
+    if not os.access(path, os.R_OK):
+        raise PermissionError(f"Path '{path}' is not readable.")

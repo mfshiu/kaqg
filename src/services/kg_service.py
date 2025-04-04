@@ -40,6 +40,8 @@ class Topic(StrEnum):
 class KnowledgeGraphService(Agent):
 
     def __init__(self, cfg):
+        app_helper.check_directory_accessible(cfg['kg']['datapath'])
+
         super().__init__('kg_service.services.wastepro', cfg)
         self.hostname = cfg['kg']['hostname']
         self.datapath = cfg['kg']['datapath']
@@ -47,7 +49,11 @@ class KnowledgeGraphService(Agent):
     
     
     def on_activate(self):
-        self.docker_manager = DockerManager(self.hostname, self.datapath)
+        try:
+            self.docker_manager = DockerManager(self.hostname, self.datapath)
+        except Exception as e:
+            logger.error(f"Failed to create DockerManager: {e}")
+            raise Exception(f"Failed to create DockerManager: {self.hostname}, {self.datapath}")
         self.all_kgs = self.docker_manager.list_KGs()
         logger.info(f"Existing KGs: {self.all_kgs}")
 
@@ -192,8 +198,6 @@ if __name__ == '__main__':
             kg_agent.terminate()
 
 
-    from services.llm_service import LlmService
-    
     config = app_helper.get_agent_config()
     config['kg'] = app_helper.config['service']['kg']
     kg_agent = KnowledgeGraphService(config)
