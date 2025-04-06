@@ -179,7 +179,7 @@ def wait_agent(agent):
 
     while agent.is_active():
         time.sleep(1)
-        
+
         dot_counter += 1
         if dot_counter % 6 == 0:
             print('.', end='', flush=True)

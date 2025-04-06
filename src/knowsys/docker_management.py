@@ -1,4 +1,3 @@
-import http
 import docker
 import os
 import socket
@@ -17,14 +16,15 @@ class DockerManager:
     :param detach: 是否在後台運行容器 (預設為 True)
     :return: Docker 回傳DokerManager instance
     """
-    def __init__(self, hostname='localhost', datapath=None):
-        self.datapath = datapath if datapath else os.path.join(os.getcwd(), "src/knowsys/data")
-        print(f"datapath: {self.datapath}")
+    def __init__(self, hostname='localhost', base_volume_dir=None):
+        # self.base_volume_dir = base_volume_dir if base_volume_dir else os.path.join(os.getcwd(), "src/knowsys/data")
+        self.base_volume_dir = base_volume_dir if base_volume_dir else os.path.join(os.getcwd(), "src/knowsys/volumes")
+        os.makedirs(self.base_volume_dir, exist_ok=True)
+        print(f"base_volume_dir: {self.base_volume_dir}")
         self.hostname = hostname
         self.client = docker.from_env()
         self.image = "neo4j:community"
         # self.image = "neo4j:5.26.3-community-ubi9"
-        self.volumns  = self.datapath
         self.detach = True
 
 
@@ -95,21 +95,24 @@ class DockerManager:
     
     def create_container(self, kgName):
         """
-        建立一個新的 Docker 容器。
-        
-        :param image: 容器的 Docker 映像名稱
-        :param name: 容器名稱 (可選)
-        :param ports: 映射的端口，格式為 {'container_port/protocol': host_port}
-        :param volumes: 映射的資料儲存位置，格式為 {host_path: {'bind': container_path, 'mode': 'rw'}}
-        :param detach: 是否在後台運行容器 (預設為 True)
-        :return: Docker 容器對象
+        建立一個新的 Neo4j Docker 容器，並將對應資料掛載到指定資料夾。
+
+        功能說明：
+        - 自動取得可用的 HTTP 與 Bolt 連接埠
+        - 建立對應的本機 Volume 資料夾（綁定到 `/data`）
+        - 啟動包含 APOC Plugin 的 Neo4j 容器，並停用認證（NEO4J_AUTH=none）
+        - 等待容器啟動成功（可連線）後，回傳 HTTP 與 Bolt 的存取 URL
+
+        :param kgName: 知識圖譜名稱，同時作為 Docker container 名稱與資料資料夾名稱
+        :return: (http_url, bolt_url) — 成功則為 HTTP 與 Bolt 協議的 URL，失敗則為 (None, None)
         """
         print(f"Creating new container for {kgName}...")
         http_port = self.get_free_port(7474)
         bolt_port = self.get_free_port(7687)
 
         # Ensure the path is absolute and normalized
-        kg_path = os.path.join(self.datapath, 'neo4j_KGs', kgName)
+        kg_path = os.path.join(self.base_volume_dir, kgName)
+        # kg_path = os.path.join(self.datapath, 'neo4j_KGs', kgName)
         kg_path = os.path.normpath(kg_path)  # Normalize the path to use correct separators
         kg_path = os.path.abspath(kg_path)  # Convert to absolute path
         # Docker on Windows might need paths to use forward slashes
@@ -225,11 +228,11 @@ class DockerManager:
         :return: 容器列表
         """
         directories = []
-        kgs_dir = os.path.join(self.datapath, 'neo4j_KGs')
-        os.makedirs(kgs_dir, exist_ok=True)
-        items = os.listdir(kgs_dir)
+        # kgs_dir = os.path.join(self.base_volume_dir, 'neo4j_KGs')
+        # os.makedirs(kgs_dir, exist_ok=True)
+        items = os.listdir(self.base_volume_dir)
         # 過濾出資料夾
-        directories = [item for item in items if os.path.isdir(os.path.join(os.path.join(self.datapath, 'neo4j_KGs'), item))]
+        directories = [item for item in items if os.path.isdir(os.path.join(self.base_volume_dir, item))]
         return directories
 
 
@@ -270,9 +273,9 @@ class DockerManager:
         """
         try:
             self.stop_KG(kgName)
-            path = f"neo4j_KGs/{kgName}"
-            directory = os.path.normpath(os.path.join(self.datapath,path))
-            shutil.rmtree(directory)
+            volume_dir = os.path.join(self.base_volume_dir, kgName)
+            # directory = os.path.normpath(os.path.join(self.base_volume_dir,path))
+            shutil.rmtree(volume_dir)
         except:
             pass
 
