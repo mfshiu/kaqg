@@ -55,9 +55,8 @@ def initialize(module_name=None):
 def _init_logging(config):
     log_name = "wastepro"
     log_path = os.path.join(os.getcwd(), '_log', f'{log_name}.log')
-    # if os.path.exists(log_path):
-    #     os.remove(log_path)
     log_level = logging.DEBUG    
+
     if cfg := config.get('logging'):
         log_name = cfg.get("name", log_name)
         log_path = cfg.get("path", log_path)
@@ -75,9 +74,16 @@ def _init_logging(config):
     datefmt = '%m-%d %H:%M:%S'
     console_formatter = ColorFormatter(fmt, datefmt)
     file_formatter = logging.Formatter(fmt, datefmt)
-    
+
     # File handler
-    file_handler = TimedRotatingFileHandler(log_path, when="d", encoding="utf-8", backupCount=0)
+    file_handler = TimedRotatingFileHandler(
+        log_path,
+        when="d",
+        encoding="utf-8",
+        backupCount=0,
+        delay=True,                 # 延遲寫入，避免程式啟動時就創建檔案
+        errors='backslashreplace'   # 防止特殊字元寫入錯誤
+    )
     file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
@@ -86,13 +92,12 @@ def _init_logging(config):
     console_handler.setLevel(log_level)
     console_handler.setFormatter(console_formatter)
 
-    # 避免重複添加 handler
+    # 設定 logger
     logger = logging.getLogger(log_name)
     logger.handlers.clear()
-    logger.propagate = False    # 避免被加入 default handler
+    logger.propagate = False
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
-
     logger.setLevel(log_level)
 
     logger.info(f"Log name: {logger.name}, Level: {logger.level}, Path: {log_path}")

@@ -8,6 +8,7 @@ app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 
 from itertools import product
 import json
+import math
 import random
 
 import logging
@@ -78,7 +79,38 @@ class ScqEvaluator(Agent):
 
 
     def _evaluate_1(self, assessment):
-        return random.randint(1, 3)
+        def grade_stem_length(stem: str) -> int:
+            length = len(stem)
+            if length < 10:
+                return 1  # 長度過短，不分級
+            elif length > 35:
+                return 3
+
+            ## 計算與各中心的距離轉為權重
+            # 模糊分級中心點
+            centers = {
+                1: 15,  # Short
+                2: 25,  # Medium
+                3: 35   # Long
+            }
+            sigma = 4  # 控制模糊程度，越小越敏感
+            # 計算與各中心的距離轉為權重
+            weights = {
+                k: math.exp(-((length - c) ** 2) / (2 * sigma ** 2))
+                for k, c in centers.items()
+            }
+
+            # 使用權重進行隨機選擇
+            grades = list(weights.keys())
+            probs = list(weights.values())
+            selected = random.choices(grades, weights=probs, k=1)[0]
+            
+            return selected
+        
+        stem = assessment['question']['stem']
+        grade = grade_stem_length(stem)
+        logger.debug(f"grade: {grade}, len: {len(stem)}, stem: {stem}")
+        # return random.randint(1, 3)
     
 
     def _evaluate_2_to_7(self, assessment):
