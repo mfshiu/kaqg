@@ -66,9 +66,10 @@ class ScqEvaluator(Agent):
         logger.debug(f"assessment: {assessment}")
         
         evaluated = self.evaluate(assessment)
-
         logger.debug(f"evaluated result: {evaluated}")
-        return evaluated
+        assessment['evaluation'] = evaluated
+        
+        return assessment
     
     
     def get_test_result(self, assessment):
@@ -110,11 +111,70 @@ class ScqEvaluator(Agent):
         stem = assessment['question']['stem']
         grade = grade_stem_length(stem)
         logger.debug(f"grade: {grade}, len: {len(stem)}, stem: {stem}")
+        return grade
         # return random.randint(1, 3)
     
 
     def _evaluate_2_to_7(self, assessment):
-        return {key: random.randint(1, 3) for key in ScqFeatures.keys[1:]}
+        question_str = json.dumps(assessment['question'], ensure_ascii=False)
+        logger.verbose(f"question_str: {question_str}")
+        user_content = f"""I have a Single Choice Question (SCQ) in the following JSON structure:
+{question_str}
+
+Evaluate the SCQ using these features:
+- stem_technical_term_density: 1 = few or no technical terms, 2 = moderate, 3 = many
+- stem_cognitive_level: 1 = memorization, 2 = understanding, 3 = analysis or evaluation
+- option_average_length: 1 = short (1–5 chars), 2 = medium (3–8), 3 = long (more than 5)
+- option_similarity: 1 = low similarity (<30%), 2 = moderate (~45%), 3 = high (>60%)
+- stem_option_similarity: 1 = low relevance, 2 = moderate, 3 = high
+- high_distractor_count: 1 = 1 strong distractor, 2 = 2, 3 = more than 3
+
+Return only a JSON object like this:
+{{
+    "stem_technical_term_density": 2,
+    "stem_cognitive_level": 3,
+    "option_average_length": 1,
+    "option_similarity": 2,
+    "stem_option_similarity": 3,
+    "high_distractor_count": 2
+}}
+"""
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful exam question evaluator. Please evaluate the question according to the feature keys and levels provided. Only return your response in JSON format."
+            },
+            {
+                "role": "user",
+                "content": user_content
+            }
+        ]
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "evaluate_question",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        key: {"type": "integer", "minimum": 1, "maximum": 3}
+                        for key in ScqFeatures.keys[1:]
+                    },
+                    "required": list(ScqFeatures.keys[1:]),
+                    "additionalProperties": False
+                }
+            }
+        }
+        params = {
+            'messages': messages,
+            'response_format': response_format,
+        }
+        pcl = TextParcel(params)
+        evaluation = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
+        evaluation_result = json.loads(evaluation.content['response'])
+        logger.debug(f"evaluation_result: {evaluation_result}")
+        
+        return evaluation_result
+        # return {key: random.randint(1, 3) for key in ScqFeatures.keys[1:]}
 
 
     def evaluate(self, assessment):
@@ -125,257 +185,6 @@ class ScqEvaluator(Agent):
         return feature_grades
 
     
-    def evaluate_question(self, assessment):
-        logger.debug(f"assessment: {assessment}")
-        return not assessment.get('error') and assessment.get('question')
-        
-        
-    def choice_concept(self, concept_nodes):
-        return random.choice(concept_nodes)
-    
-    
-    def _get_weighted_combination(self, score):
-        """
-        隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
-        每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
-
-        權重分配：
-        - stem_cognitive_level：1.5
-        - high_distractor_count：1.2
-        - 其他特徵：1
-
-        :param score: 目標總分
-        :return: 一組符合條件的參數組合，對應七個具體描述
-        """
-        
-        weights = [1, 1, 1.5, 1, 1, 1, 1.2] # 定義各參數的權重  
-        down_score, up_score = score - 1, score + 1
-        if up_score < (sw:=sum(weights)) or down_score > sw * 3:
-            return [0] * 7
-        
-        all_comnination = list(product(range(1, 4), repeat=7))
-        random.shuffle(all_comnination)
-
-        # 篩選符合條件的組合
-        valid_combination = None
-        for combination in all_comnination:
-            weighted_sum = sum(x * w for x, w in zip(combination, weights))
-            if down_score <= weighted_sum <= up_score:
-                valid_combination = combination
-                break
-
-        keys = [
-            "stem_length",
-            "stem_technical_term_density",
-            "stem_cognitive_level",
-            "option_average_length",
-            "option_similarity",
-            "stem_option_similarity",
-            "high_distractor_count",
-        ]
-
-        return dict(zip(keys, valid_combination))
-
-
-    def _generate_features_prompt(self, combination):
-        """
-        Automatically generates a question description based on parameter scores and feature table.
-        :param parameters: A dictionary containing scores for 7 features
-        :return: Question description
-        """
-        descs = [
-            ["Short stem length (10 to 25 characters)", "Medium stem length (15 to 35 characters)", "Long stem length (over 20 characters)"],
-            ["Few or no technical terms in stem (0 to 2 terms)", "Moderate number of technical terms in stem (2 to 4 terms)", "Many technical terms in stem (more than 3 terms)"],
-            ["Only requires memorization of knowledge points", "Requires understanding and synthesis of knowledge points", "Requires analysis, synthesis, or evaluation"],
-            ["Short option text (1 to 5 characters)", "Medium option text (3 to 8 characters)", "Long option text (more than 5 characters)"],
-            ["Low similarity between options (below 30%)", "Moderate similarity between options (around 45%)", "High similarity between options (above 60%)"],
-            ["Low relevance between stem and options (below 30%)", "Moderate relevance between stem and options (around 45%)", "High relevance between stem and options (above 60%)"],
-            ["Includes 1 highly attractive distractor", "Includes 2 highly attractive distractors", "Includes more than 3 highly attractive distractors"]
-        ]
-        keys = [
-            "stem_length",
-            "stem_technical_term_density",
-            "stem_cognitive_level",
-            "option_average_length",
-            "option_similarity",
-            "stem_option_similarity",
-            "high_distractor_count"
-        ]
-        titles = [
-            "Stem Length",
-            "Technical Term Density in Stem",
-            "Cognitive Level",
-            "Average Option Length",
-            "Option Similarity",
-            "Stem-Option Similarity",
-            "Number of High-Attraction Distractors"
-        ]
-
-        prompt = (f'{titles[i]}: {descs[i][combination[keys[i]] - 1]}' for i in range(7))
-        return prompt
-
-
-    def _chat(self, prompt_text):
-        messages = [
-            {"role": "system", "content": "You are a helpful exam question generator. 你所建立的題目為單選題，答案只有一個。 Please provide your response with 繁體中文 in JSON format."},
-            {"role": "user", "content": f"{prompt_text}\nPlease provide your response in JSON format."}
-        ]
-        
-        response_format = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "generate_question",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "stem": {"type": "string"},
-                        "option_A": {"type": "string"},
-                        "option_B": {"type": "string"},
-                        "option_C": {"type": "string"},
-                        "option_D": {"type": "string"},
-                        "answer": {"type": "string"},
-                    },
-
-                    "required": [
-                        "stem",
-                        "option_A",
-                        "option_B",
-                        "option_C",
-                        "option_D",
-                        "answer"
-                    ],
-                    "additionalProperties": False
-                }
-            }
-        }
-
-        params = {
-            'messages': messages,
-            'response_format': response_format,
-        }
-        
-        pcl = TextParcel(params)
-        question = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
-        return json.loads(question.content['response'])
-
-
-    def __shuffle_question(self, question):
-        # Extract original options
-        original_options = {
-            "A": question["option_A"],
-            "B": question["option_B"],
-            "C": question["option_C"],
-            "D": question["option_D"]
-        }
-        correct_answer_text = original_options[question["answer"]]
-
-        # Shuffle options
-        shuffled_items = list(original_options.items())
-        random.shuffle(shuffled_items)
-
-        # Build new question structure
-        new_question = {
-            "stem": question["stem"]
-        }
-
-        for idx, (_, text) in enumerate(shuffled_items):
-            key = chr(ord("A") + idx)
-            new_question[f"option_{key}"] = text
-            if text == correct_answer_text:
-                correct_new_key = key
-
-        new_question["answer"] = correct_new_key
-        return new_question
-
-    def _make_question(self, text_materials, difficulty):
-        # Eddie
-        # difficulty: 30, 50, 70
-        # 丙：10分 for difficulty 30
-        # 乙：14分 for difficulty 50
-        # 甲：18分 for difficulty 70
-        # 隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
-        # 每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
-        # 權重分配：- stem_cognitive_level：1.5 - high_distractor_count：1.2 - 其他特徵：1
-
-        difficulty_mapping = {
-            30: 10,
-            50: 14,
-            70: 18
-        }
-        
-        score = difficulty_mapping[difficulty]
-        combination = self._get_weighted_combination(score)
-        features = self._generate_features_prompt(combination)
-        
-        prompt_text =  f"""
-You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
-1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
-2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
-3.Do not provide explanations or analysis of the questions or answers.
-4.Output the result in a table format with the following headers:
-    - Stem
-    - Option A
-    - Option B
-    - Option C
-    - Option D
-    - Answer (only indicate the correct option: A, B, C, or D).
-
-Features:
-{features}
-
-Text:
-{text_materials}
-"""
-        question = self._chat(prompt_text)
-        logger.info(f"type:{type(question)}, question: {question}")
-        return self.__shuffle_question(question)
-    
-    
-    def _generate_text_materials(self, subject, fact_nodes):
-        def generate_text_from_paths(records):
-            """
-            從每個 record 取得路徑 (path)，
-            提取 (start_node)-[rel]->(end_node) 組成文字描述。
-            """
-            text_segments = set()
-            for record in records:
-                path = record["p"] 
-                for rel in path.relationships:
-                    start_node = rel.start_node
-                    end_node = rel.end_node
-                    
-                    s_id = start_node.get("name", "(unknown)") 
-                    e_id = end_node.get("name", "(unknown)") 
-                    r_type = rel.type
-                    text_segments.add(f"{s_id}{r_type}{e_id}")
-
-            texts = list(text_segments)
-            logger.verbose(f"text_segments: {texts}")
-            return texts
-
-
-        query = """
-            MATCH p = (start:fact)-[*1..1]-(other:fact)
-            WHERE elementId(start) = $start_element_id
-            RETURN p
-        """
-        pcl = TextParcel({'kg_name': subject})
-        bolt_url = self.publish_sync(Topic.ACCESS_POINT.value, pcl).content['bolt_url']
-        text_materials = []
-        with KnowledgeGraph(uri=bolt_url) as kg:
-            with kg.session() as session:
-                for fact in fact_nodes:
-                    results = session.run(query, start_element_id=fact['element_id'])
-                    text_materials.extend(generate_text_from_paths(results))
-
-        return text_materials
-        # return [
-        #     "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
-        #     "104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%",
-        #     "基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用"
-        # ]
-            
-
 
 if __name__ == '__main__':
     agent = ScqEvaluator(app_helper.get_agent_config())

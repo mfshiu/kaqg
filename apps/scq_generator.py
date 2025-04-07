@@ -7,6 +7,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 
+from evaluation.features import ScqFeatures
+
 
 
 class GetSCQGeneratorPrompt:
@@ -52,15 +54,7 @@ class GetSCQGeneratorPrompt:
                 valid_combination = combination
                 break
 
-        keys = [
-            "stem_length",
-            "stem_technical_term_density",
-            "stem_cognitive_level",
-            "option_average_length",
-            "option_similarity",
-            "stem_option_similarity",
-            "high_distractor_count",
-        ]
+        keys = ScqFeatures.keys
 
         return dict(zip(keys, valid_combination))
     
@@ -71,35 +65,11 @@ class GetSCQGeneratorPrompt:
         :param parameters: A dictionary containing scores for 7 features
         :return: Question description
         """
-        descs = [
-            ["Short stem length (10 to 25 characters)", "Medium stem length (15 to 35 characters)", "Long stem length (over 20 characters)"],
-            ["Few or no technical terms in stem (0 to 2 terms)", "Moderate number of technical terms in stem (2 to 4 terms)", "Many technical terms in stem (more than 3 terms)"],
-            ["Only requires memorization of knowledge points", "Requires understanding and synthesis of knowledge points", "Requires analysis, synthesis, or evaluation"],
-            ["Short option text (1 to 5 characters)", "Medium option text (3 to 8 characters)", "Long option text (more than 5 characters)"],
-            ["Low similarity between options (below 30%)", "Moderate similarity between options (around 45%)", "High similarity between options (above 60%)"],
-            ["Low relevance between stem and options (below 30%)", "Moderate relevance between stem and options (around 45%)", "High relevance between stem and options (above 60%)"],
-            ["Includes 1 highly attractive distractor", "Includes 2 highly attractive distractors", "Includes more than 3 highly attractive distractors"]
-        ]
-        keys = [
-            "stem_length",
-            "stem_technical_term_density",
-            "stem_cognitive_level",
-            "option_average_length",
-            "option_similarity",
-            "stem_option_similarity",
-            "high_distractor_count"
-        ]
-        titles = [
-            "Stem Length",
-            "Technical Term Density in Stem",
-            "Cognitive Level",
-            "Average Option Length",
-            "Option Similarity",
-            "Stem-Option Similarity",
-            "Number of High-Attraction Distractors"
-        ]
+        descs = ScqFeatures.level_descriptions
+        keys = ScqFeatures.keys
+        titles = ScqFeatures.titles
 
-        prompt = (f'{titles[i]}: {descs[i][parameters[keys[i]] - 1]}' for i in range(7))
+        prompt = (f'{titles[i]}: {descs[i][parameters[keys[i]] - 1]}' for i in range(len(keys)))
         return prompt
 
 
@@ -154,6 +124,8 @@ class GetSCQGeneratorPrompt:
     
     def generate_scq(self, score, text_materials)-> dict:
         parameter = self._get_weighted_combination(score)
+        
+        from evaluation import scq_feature_criteria
         features = self._generate_features_prompt(parameter)
         
         prompt_text =  f"""

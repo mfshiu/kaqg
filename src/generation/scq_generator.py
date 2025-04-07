@@ -29,7 +29,12 @@ from knowsys.knowledge_graph import KnowledgeGraph
 
 class SingleChoiceGenerator(Agent):
     TOPIC_CREATE = "Create/SCQ/Generation"
-
+    
+    difficulty_mapping = {
+        30: 10,
+        50: 14,
+        70: 18
+    }
 
     def __init__(self, config:dict):
         logger.info(f"config: {config}")
@@ -52,12 +57,15 @@ class SingleChoiceGenerator(Agent):
         question_criteria = pcl.content
         logger.debug(f"question_criteria: {question_criteria}")
         
+        try_count = 0
         generated = self.generate_question(question_criteria)
         while not self.evaluate_question(generated):
             logger.info(f"Retrying question generation...")
+            try_count += 1
             generated = self.generate_question(question_criteria)
 
-        logger.debug(f"generated_question: {generated}")
+        logger.debug(f"try_count: {try_count}")
+        logger.info(f"generated_question: {generated}")
         return generated
     
     
@@ -120,70 +128,17 @@ class SingleChoiceGenerator(Agent):
     def evaluate_question(self, assessment):
         logger.verbose(f"assessment: {assessment}")
         
-        prompt_text = f"""
-I have a Single Choice Question (SCQ) in the following JSON structure:
-
-{{
-  "stem": "Your question text",
-  "option_A": "Option A text",
-  "option_B": "Option B text",
-  "option_C": "Option C text",
-  "option_D": "Option D text",
-  "answer": "Correct answer letter"
-}}
-
-Please evaluate this SCQ according to the feature keys and levels below. Then, provide **only** the final evaluation result in JSON format (e.g., {{"stem_length": 1, "stem_technical_term_density": 2, ...}}), with no additional text or explanation.
-
-**Feature Keys and Levels**:
-
-1. **stem_technical_term_density**
-   - 1: Few or no technical terms (0 to 2 terms)
-   - 2: Moderate number of technical terms (2 to 4 terms)
-   - 3: Many technical terms (more than 3 terms)
-
-2. **stem_cognitive_level**
-   - 1: Only requires memorization of knowledge points
-   - 2: Requires understanding and synthesis
-   - 3: Requires analysis, synthesis, or evaluation
-
-3. **option_average_length**
-   - 1: Short option text (1 to 5 characters)
-   - 2: Medium option text (3 to 8 characters)
-   - 3: Long option text (more than 5 characters)
-
-4. **option_similarity**
-   - 1: Low similarity between options (below 30%)
-   - 2: Moderate similarity (around 45%)
-   - 3: High similarity (above 60%)
-
-5. **stem_option_similarity**
-   - 1: Low relevance between stem and options (below 30%)
-   - 2: Moderate relevance (around 45%)
-   - 3: High relevance (above 60%)
-
-6. **high_distractor_count**
-   - 1: Includes 1 highly attractive distractor
-   - 2: Includes 2 highly attractive distractors
-   - 3: Includes more than 3 highly attractive distractors
-
-**Instructions**:
-1. Read the SCQ from the JSON input.
-2. Evaluate each of the seven features using the guidelines above.
-3. Output the result in JSON format using the exact keys shown, e.g.:
-   {{
-     "stem_technical_term_density": 2,
-     "stem_cognitive_level": 3,
-     "option_average_length": 1,
-     ...
-   }}
-
-No additional explanation or text is needed—only the evaluation JSON.
-"""
-
         evaluated = self.publish_sync(ScqEvaluator.TOPIC_EVALUATE, TextParcel(assessment))
-        logger.debug(f"evaluated: {evaluated}")
+        logger.debug(f"evaluated: {evaluated.content}")
         
-        return not assessment.get('error') and assessment.get('question')
+        grade_criteria = SingleChoiceGenerator.difficulty_mapping[assessment['question_criteria']['difficulty']]
+        grade_evaluated = sum(evaluated.content['evaluation'].values())
+        passed = grade_criteria - 1 <= grade_evaluated <= grade_criteria + 1
+        logger.debug(f"passed: {passed}, grade_criteria: {grade_criteria}, grade_evaluated: {grade_evaluated}")
+        
+        return passed
+        
+        # return not assessment.get('error') and assessment.get('question')
         
         
     def choice_concept(self, concept_nodes):
@@ -233,7 +188,7 @@ No additional explanation or text is needed—only the evaluation JSON.
         titles = ScqFeatures.titles
         descs = ScqFeatures.level_descriptions
 
-        prompt = (f'{titles[i]}: {descs[i][combination[keys[i]] - 1]}' for i in range(7))
+        prompt = (f'{titles[i]}: {descs[i][combination[keys[i]] - 1]}' for i in range(len(keys)))
         return prompt
 
 
@@ -319,15 +274,13 @@ No additional explanation or text is needed—only the evaluation JSON.
         # 每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
         # 權重分配：- stem_cognitive_level：1.5 - high_distractor_count：1.2 - 其他特徵：1
 
-        difficulty_mapping = {
-            30: 10,
-            50: 14,
-            70: 18
-        }
-        
-        score = difficulty_mapping[difficulty]
+        score = SingleChoiceGenerator.difficulty_mapping[difficulty]
         combination = self._get_weighted_combination(score)
+        logger.verbose(f"combination: {combination}")
         features = self._generate_features_prompt(combination)
+        logger.verbose(f"features:")
+        for f in features:
+            logger.verbose(f)
         
         prompt_text =  f"""
 You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
