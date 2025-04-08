@@ -235,7 +235,8 @@ class SectionPairer:
             concepts (list): List of identified concepts
             aliases_table (dict): Mapping of terms to their aliases
         """
-        structure_dict = {'type': 'structure', 'name': sections[-1][-1]}
+        structure_type = 'document' if len(sections) == 1 else 'structure'
+        structure_dict = {'type': structure_type, 'name': sections[-1][-1]}
         include_in_dict = {'name': 'include_in'}
         
         for concept in concepts:
@@ -266,6 +267,9 @@ class SectionPairer:
             facts_pair (list): List of fact pairs to be related
         """
         for pair in facts_pair:
+            if len(pair) != 3:
+                logger.warning(f"Skip for wrong facts relation: {pair}")
+                continue
             try:
                 fact1 = pair[0]
                 relatioship = pair[1]

@@ -156,9 +156,9 @@ def main():
 
 if __name__ == '__main__':
     def signal_handler(signal, frame):
+        print("Ctrl-C for Exiting...")
         global is_running
         is_running = False
-        print("Ctrl-C for Exiting...")
     signal.signal(signal.SIGINT, signal_handler)
 
     main()

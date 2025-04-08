@@ -8,11 +8,14 @@ from openai import OpenAI
 from services.llms.base_llm import BaseLLM
 import json
 
+import logging
+logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
+
 
 class ChatLLM(BaseLLM):
     _default_params = {
         'model': 'gpt-4o-mini',
-        'response_format': 'text',  # 'text' or dict (function-calling format)
+        # 'response_format': 'text',  # 'text' or dict (function-calling format)
         'temperature': 0,
         'streaming': False,
         'openai_api_key': "",
@@ -63,10 +66,13 @@ class ChatLLM(BaseLLM):
         kwargs = {
             "model": params.get('model', self.model),
             "messages": messages,
-            "response_format": params.get('response_format', self.response_format),
+            # "response_format": params.get('response_format', self.response_format),
             "temperature": params.get('temperature', self.temperature),
             "stream": params.get('streaming', self.streaming),
         }
+        if self.response_format:
+            kwargs['response_format'] = self.response_format
+        logger.verbose(f"kwargs: {kwargs}")
 
         response = self.client.chat.completions.create(**kwargs)
 

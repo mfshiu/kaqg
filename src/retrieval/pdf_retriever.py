@@ -1,5 +1,6 @@
 # Required when executed as the main program.
 import os, sys
+from urllib import response
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
@@ -11,9 +12,9 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel, TextParcel
 from services.file_service import FileService
-from services.kg_service import KnowledgeGraphService, Action
+from services.kg_service import Topic
 from services.llm_service import LlmService
-from retrieval import ensure_size
+from retrieval import part_str
 # import retrieval.extract_tool as et
 from retrieval.extract_tool import FactConceptExtractor, SectionPairer
 from retrieval.pdf_tool import PdfImport
@@ -53,12 +54,7 @@ class PdfRetriever(Agent):
             # 'meta': {..}, # dict
         # }
         
-        # kg_info = self.publish_sync(KnowledgeGraphService.TOPIC_CREATE)
-        # kg_info: {
-        #     'kg_name': kg_name,
-        #     'topic_triplets_add': topic_triplets_add,
-        # }
-        topic_triplets_add = KnowledgeGraphService.get_topic(Action.TRIPLETS_ADD, kg_name)
+        topic_triplets_add = f'{kg_name}/{Topic.TRIPLETS_ADD.value}'
         logger.verbose(f"topic_triplets_add: {topic_triplets_add}")
 
         pages = self.read_pages(file_info['file_path'])
@@ -78,7 +74,7 @@ class PdfRetriever(Agent):
 
         def process_page(page_number, page_content, file_info, kg_name, topic_triplets_add):
             """Process a single page, extracting and publishing triplets."""
-            logger.info(f"Page {page_number}: {ensure_size(page_content, 150)}")
+            logger.info(f"Page {page_number}: {part_str(page_content, 150)}")
             sections = self.locate_sections(page_number, toc)
             logger.debug(f"sections: {sections}")
             triplets = self.extract_triplets(page_content, sections, meta)
@@ -264,6 +260,7 @@ class PdfRetriever(Agent):
         logger.debug(f"aliases_table: {aliases_table}")
 
         # start to generate triplets
+        logger.debug("Start to generate triplets..")
         pairer = SectionPairer()
         pairer.pair_concepts_with_facts(sections, entity_hierarchy, aliases_table)
         pairer.pair_sections_with_concepts(sections, concepts, aliases_table)
@@ -271,6 +268,7 @@ class PdfRetriever(Agent):
         pairer.pair_facts_and_facts(facts_pairs)
 
         triplets = pairer.get_results()
+        # logger.verbose(f"triplets: {triplets}")
         return triplets
 
 
@@ -281,12 +279,30 @@ class PdfRetriever(Agent):
 
 
         def __call__(self, message:str):
-            pcl = TextParcel({'prompt': message})
+            messages = [
+                {"role": "user", "content": message},
+                # {"role": "user", "content": f"{message}\nPlease provide your response in JSON format."}
+            ]            
+            params = {
+                'messages': messages,
+            }            
+            pcl = TextParcel(params)
             logger.verbose(f"pcl: {pcl}")
-            
+
             chat_response = self.agent.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
-            # logger.debug(f"chat_response: {chat_response}")
-            return chat_response.content['response']
+            response = chat_response.content['response']
+            logger.verbose(f"response: {response}")
+            
+            return response
+
+
+        # def __call__(self, message:str):
+        #     pcl = TextParcel({'prompt': message})
+        #     logger.verbose(f"pcl: {pcl}")
+            
+        #     chat_response = self.agent.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl, timeout=20)
+        #     # logger.debug(f"chat_response: {chat_response}")
+        #     return chat_response.content['response']
 
 
 
