@@ -8,7 +8,7 @@ app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 
 from itertools import product
 import json
-import math
+import re
 import random
 
 import logging
@@ -81,32 +81,29 @@ class ScqEvaluator(Agent):
 
     def _evaluate_1(self, assessment):
         def grade_stem_length(stem: str) -> int:
-            length = len(stem)
-            if length < 10:
-                return 1  # 長度過短，不分級
-            elif length > 35:
-                return 3
+            stem_clean = stem.strip()
 
-            ## 計算與各中心的距離轉為權重
-            # 模糊分級中心點
-            centers = {
-                1: 15,  # Short
-                2: 25,  # Medium
-                3: 35   # Long
-            }
-            sigma = 4  # 控制模糊程度，越小越敏感
-            # 計算與各中心的距離轉為權重
-            weights = {
-                k: math.exp(-((length - c) ** 2) / (2 * sigma ** 2))
-                for k, c in centers.items()
-            }
+            # 判斷是否為大多為中文（中英文混雜時以中文為主）
+            chinese_chars = re.findall(r'[\u4e00-\u9fff]', stem_clean)
+            english_words = re.findall(r'[a-zA-Z]+', stem_clean)
 
-            # 使用權重進行隨機選擇
-            grades = list(weights.keys())
-            probs = list(weights.values())
-            selected = random.choices(grades, weights=probs, k=1)[0]
-            
-            return selected
+            is_chinese = len(chinese_chars) >= len(english_words)
+            if is_chinese:
+                length = len(chinese_chars)
+                if length <= 15:
+                    return 1
+                elif length <= 30:
+                    return 2
+                else:
+                    return 3
+            else:
+                word_count = len(stem_clean.split())
+                if word_count <= 10:
+                    return 1
+                elif word_count <= 20:
+                    return 2
+                else:
+                    return 3
         
         stem = assessment['question']['stem']
         grade = grade_stem_length(stem)
@@ -121,14 +118,44 @@ class ScqEvaluator(Agent):
         user_content = f"""I have a Single Choice Question (SCQ) in the following JSON structure:
 {question_str}
 
-Evaluate the SCQ using these features:
-- stem_technical_term_density: 1 = few or no technical terms, 2 = moderate, 3 = many
-- stem_cognitive_level: 1 = memorization, 2 = understanding, 3 = analysis or evaluation
-- option_average_length: 1 = short (1–5 chars), 2 = medium (3–8), 3 = long (more than 5)
-- option_similarity: 1 = low similarity (<30%), 2 = moderate (~45%), 3 = high (>60%)
-- stem_option_similarity: 1 = low relevance, 2 = moderate, 3 = high
-- high_distractor_count: 1 = 1 strong distractor, 2 = 2, 3 = more than 3
+Evaluate the Single Choice Question (SCQ) based on the following six features. For each feature, assign a score of 1, 2, or 3, using the definitions provided. Your evaluation should be accurate and based only on the SCQ’s content.
 
+1. stem_technical_term_density
+  Rate how many technical terms appear in the question stem.
+  - 1 = Few or no technical terms (0–2)
+  - 2 = Moderate number of technical terms (2–4)
+  - 3 = Many technical terms (more than 3)
+
+2. stem_cognitive_level
+  Determine the cognitive demand of the stem based on Bloom’s taxonomy.
+  - 1 = Memorization (recall of facts)
+  - 2 = Understanding or synthesis (conceptual comprehension, combination)
+  - 3 = Analysis or evaluation (critical thinking, judgment)
+
+3. option_average_length
+  Evaluate the average character length of the options.
+  - 1 = Short (1–4 words)
+  - 2 = Medium (3–6 words)
+  - 3 = Long (more than 5 words)
+
+4. option_similarity
+  Assess how similar the options are to each other in wording or meaning.
+  - 1 = Low similarity (less than 20%)
+  - 2 = Moderate similarity (around 50%)
+  - 3 = High similarity (greater than 80%)
+
+5. stem_option_similarity
+  Evaluate how closely related the options are to the stem.
+  - 1 = High relevance (greater than 80%)
+  - 2 = Moderate relevance (around 50%)
+  - 3 = Low relevance (less than 20%)
+
+6. high_distractor_count
+  Count how many highly attractive distractors (incorrect but plausible options) are included.
+  - 1 = 1 strong distractor
+  - 2 = 2 strong distractors
+  - 3 = Include more than 3 strong distractors
+ 
 Return only a JSON object like this:
 {{
     "stem_technical_term_density": 2,
@@ -139,6 +166,8 @@ Return only a JSON object like this:
     "high_distractor_count": 2
 }}
 """
+        # logger.debug(f"user_content:\n{user_content}")
+        
         messages = [
             {
                 "role": "system",

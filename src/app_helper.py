@@ -1,6 +1,8 @@
 from datetime import datetime
+import json
 from pathlib import Path
 import os
+import re
 import signal
 import time
 
@@ -134,10 +136,35 @@ def ensure_local_copy(gvfs_path):
 
 
 def fix_json(json_text):
+    # Remove Markdown wrapping
+    if json_text.startswith("```json") or json_text.startswith("```"):
+        json_text = json_text.strip("`").split('\n', 1)[-1].rsplit('\n', 1)[0]
+
     last_valid_index = max(json_text.rfind("}"), json_text.rfind("]"))
     json_fixed = json_text[:last_valid_index+1]
 
     return json_fixed
+
+
+def fix_json_keys(obj):
+    if isinstance(obj, dict):
+        new_obj = {}
+        for key, value in obj.items():
+            new_key = re.sub(r'\s+', '_', key)       # replace spaces with underscores
+            new_key = new_key[0].lower() + new_key[1:] if new_key else new_key  # lowercase first letter
+            new_obj[new_key] = fix_json_keys(value)
+        return new_obj
+    elif isinstance(obj, list):
+        return [fix_json_keys(item) for item in obj]
+    else:
+        return obj
+    
+    
+def load_json(json_text):
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError as e:
+        return json.loads(fix_json(json_text))
     
     
 def get_log_level(level):

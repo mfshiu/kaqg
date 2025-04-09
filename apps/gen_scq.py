@@ -1,3 +1,32 @@
+"""
+SCQ Question Generator Script
+-----------------------------
+
+This script is designed to generate Single Choice Questions (SCQs) based on user-defined criteria,
+including subject, document, chapter, and difficulty level. It utilizes an agent-based architecture
+from the `agentflow` framework to handle the generation asynchronously.
+
+Usage:
+    python script_name.py -s SUBJECT -doc DOCUMENT -c CHAPTER -d DIFFICULTY
+
+Arguments:
+    -s / --subject     : The name of the subject (e.g., "Math")
+    -doc / --document  : The name of the document or textbook (e.g., "Wastepro02")
+    -c / --chapter     : The chapter within the document (e.g., "Chapter 1")
+    -d / --difficulty  : Difficulty level: 1 (Easy), 2 (Medium), 3 (Hard). Default is 2.
+
+Example:
+    python gen_scq.py -s "Math" -doc "Wastepro02" -c "Chapter 1" -d 3
+
+Features:
+    - Initializes configuration via `app_helper`
+    - Uses `ExecutionAgent` to publish SCQ generation requests
+    - Waits for a response within a 10-second timeout
+    - Gracefully handles interruption with Ctrl+C
+
+Author: [Your Name]
+Date: [Optional Date]
+"""
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
@@ -60,7 +89,7 @@ def generate_question(subject, document, chapter, difficulty):
     agent = ExecutionAgent(config)
     agent.start_thread()
 
-    timeout_seconds = 10
+    timeout_seconds = 30
     while is_running and timeout_seconds and agent.is_active():
         time.sleep(1)
         timeout_seconds -= 1

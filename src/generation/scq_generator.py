@@ -30,11 +30,17 @@ from knowsys.knowledge_graph import KnowledgeGraph
 class SingleChoiceGenerator(Agent):
     TOPIC_CREATE = "Create/SCQ/Generation"
     
+    # difficulty_mapping = {
+    #     30: 10,
+    #     50: 14,
+    #     70: 18
+    # }
     difficulty_mapping = {
-        30: 10,
+        30: 12,
         50: 14,
-        70: 18
+        70: 16
     }
+    weights = [1, 1, 1.5, 1, 1, 1, 1.2] # 定義各參數的權重  
 
     def __init__(self, config:dict):
         logger.info(f"config: {config}")
@@ -58,11 +64,25 @@ class SingleChoiceGenerator(Agent):
         logger.debug(f"question_criteria: {question_criteria}")
         
         try_count = 0
+        generated_questions = []  # List to store all generated questions with their evaluation results
         generated = self.generate_question(question_criteria)
-        while not self.evaluate_question(generated):
+        grade_criteria = SingleChoiceGenerator.difficulty_mapping[question_criteria['difficulty']]
+
+        while try_count < 3:
+            passed, grade_value = self.evaluate_question(generated, grade_criteria)
+            generated_questions.append((generated, passed, grade_value))  # Store the generated question along with its evaluation
+
+            if passed:  # If the question passes, stop the loop
+                break
+
             logger.info(f"Retrying question generation...")
             try_count += 1
             generated = self.generate_question(question_criteria)
+
+        # If no question passed after 3 tries, choose the one with the minimum difference between grade_value and grade_criteria
+        if not passed:
+            best_generated = min(generated_questions, key=lambda x: abs(x[2] - grade_criteria))[0]
+            generated = best_generated
 
         logger.debug(f"try_count: {try_count}")
         logger.info(f"generated_question: {generated}")
@@ -119,24 +139,28 @@ class SingleChoiceGenerator(Agent):
         
         # Make question
         maked = self._make_question(text_materials, question_criteria['difficulty'])
-        
-        assessment['question'] = maked
-        return assessment
+        if maked:
+            assessment['question'] = maked
+            return assessment
+        else:
+            return None
         # return self.test_return(question_criteria)
 
     
-    def evaluate_question(self, assessment):
+    def evaluate_question(self, assessment, grade_criteria):
         logger.verbose(f"assessment: {assessment}")
         
         evaluated = self.publish_sync(ScqEvaluator.TOPIC_EVALUATE, TextParcel(assessment))
         logger.debug(f"evaluated: {evaluated.content}")
         
-        grade_criteria = SingleChoiceGenerator.difficulty_mapping[assessment['question_criteria']['difficulty']]
-        grade_evaluated = sum(evaluated.content['evaluation'].values())
-        passed = grade_criteria - 1 <= grade_evaluated <= grade_criteria + 1
+        # grade_criteria = SingleChoiceGenerator.difficulty_mapping[assessment['question_criteria']['difficulty']]
+        grades = evaluated.content['evaluation'].values()
+        grade_evaluated = sum(x * w for x, w in zip(grades, SingleChoiceGenerator.weights))
+        # grade_evaluated = sum(evaluated.content['evaluation'].values())
+        passed = abs(grade_criteria - grade_evaluated) <= 1.5
         logger.debug(f"passed: {passed}, grade_criteria: {grade_criteria}, grade_evaluated: {grade_evaluated}")
         
-        return passed
+        return passed, grade_evaluated
         
         # return not assessment.get('error') and assessment.get('question')
         
@@ -159,9 +183,8 @@ class SingleChoiceGenerator(Agent):
         :return: 一組符合條件的參數組合，對應七個具體描述
         """
         
-        weights = [1, 1, 1.5, 1, 1, 1, 1.2] # 定義各參數的權重  
         down_score, up_score = score - 1, score + 1
-        if up_score < (sw:=sum(weights)) or down_score > sw * 3:
+        if up_score < (sw:=sum(SingleChoiceGenerator.weights)) or down_score > sw * 3:
             return [0] * 7
         
         all_comnination = list(product(range(1, 4), repeat=7))
@@ -170,7 +193,7 @@ class SingleChoiceGenerator(Agent):
         # 篩選符合條件的組合
         valid_combination = None
         for combination in all_comnination:
-            weighted_sum = sum(x * w for x, w in zip(combination, weights))
+            weighted_sum = sum(x * w for x, w in zip(combination, SingleChoiceGenerator.weights))
             if down_score <= weighted_sum <= up_score:
                 valid_combination = combination
                 break
@@ -194,8 +217,8 @@ class SingleChoiceGenerator(Agent):
 
     def _chat(self, prompt_text):
         messages = [
-            {"role": "system", "content": "You are a helpful exam question generator. 你所建立的題目為單選題，答案只有一個。 Please provide your response with 繁體中文 in JSON format."},
-            {"role": "user", "content": f"{prompt_text}\nPlease provide your response in JSON format."}
+            {"role": "system", "content": "You are a helpful exam question generator. 你所建立的題目為單選題，答案只有一個。 Please provide only one question with 繁體中文 in JSON format."},
+            {"role": "user", "content": f"{prompt_text}\nPlease response only valid JSON output. Do NOT wrap it with ``` or markdown."}
         ]
         
         response_format = {
@@ -233,10 +256,19 @@ class SingleChoiceGenerator(Agent):
         
         pcl = TextParcel(params)
         question = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
-        return json.loads(question.content['response'])
+        
+        response = None
+        try:
+            response = app_helper.load_json(json_text:=question.content['response'])
+        except json.JSONDecodeError as e:
+            logger.exception(e)
+            logger.error(f"Original response: {json_text}")
+            response = None
+            
+        return app_helper.fix_json_keys(response) if response else None
 
 
-    def __shuffle_question(self, question):
+    def __shuffle_options(self, question):
         # Extract original options
         original_options = {
             "A": question["option_A"],
@@ -302,8 +334,16 @@ Text:
 {text_materials}
 """
         question = self._chat(prompt_text)
+        if isinstance(question, list):
+            question = question[0]
         logger.info(f"type:{type(question)}, question: {question}")
-        return self.__shuffle_question(question)
+        if question:
+            if 'A' == question.get("answer"):
+                return self.__shuffle_options(question)
+            else:
+                return question
+        else:
+            return None
     
     
     def _generate_text_materials(self, subject, fact_nodes):
