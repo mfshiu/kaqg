@@ -57,11 +57,11 @@ class ExecutionAgent(Agent):
         self.subscribe(topic_return)
         
         question_criteria = {
-            'question_id': f'Q{int(time.time())}',                      # 使用者自訂題目 ID
-            'subject': self.config['subject'],                          # 考試科目(KG Name)
-            'section': [self.config['chapter']],                        # 指定章節
-            'document': self.config['document'],                        # 文件(教材)名稱
-            'difficulty': [30, 50, 70][self.config['difficulty']-1],    # 難度 30, 50, 70
+            'question_id': f'Q{int(time.time())}',                                      # 使用者自訂題目 ID
+            'subject': self.config['subject'],                                          # 考試科目(KG Name)
+            'section': [self.config['chapter']] if self.config['chapter'] else None,    # 指定章節
+            'document': self.config['document'],                                        # 文件(教材)名稱
+            'difficulty': [30, 50, 70][self.config['difficulty']-1],                    # 難度 30, 50, 70
         }
         self.publish(SingleChoiceGenerator.TOPIC_CREATE, TextParcel(question_criteria, topic_return))
 
@@ -106,7 +106,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate SCQ Questions")
     parser.add_argument('-s', '--subject', type=str, required=True, help='Subject name (e.g., "Math")')
     parser.add_argument('-doc', '--document', type=str, required=True, help='Document name (e.g., "Wastepro02")')
-    parser.add_argument('-c', '--chapter', type=str, required=True, help='Chapter name (e.g., "Chapter 1")')
+    parser.add_argument('-c', '--chapter', type=str, help='Chapter name (e.g., "Chapter 1")')
     parser.add_argument('-d', '--difficulty', type=int, default=2, help='1: Easy, 2: Medium, 3: Difficult')
 
     args = parser.parse_args()

@@ -112,9 +112,10 @@ class SingleChoiceGenerator(Agent):
         concepts = self.publish_sync(KgTopic.CONCEPTS_QUERY.value, pcl).content['concepts']
         logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
         if not concepts:
-            logger.error(msg := f"No concepts found.")
-            assessment['error'] = msg
-            return assessment
+            raise ValueError("No concepts found.")
+            # logger.error(msg := f"No concepts found.")
+            # assessment['error'] = msg
+            # return assessment
 
         # Generate text materials
         ranker = SimpleRanker(self, subject, document, section)
@@ -133,9 +134,10 @@ class SingleChoiceGenerator(Agent):
             
         logger.debug(f"text_materials: {text_materials}")
         if not text_materials:
-            logger.error(msg := f"No text materials found.")
-            assessment['error'] = msg
-            return assessment
+            raise ValueError("No text materials found.")
+            # logger.error(msg := f"No text materials found.")
+            # assessment['error'] = msg
+            # return assessment
         
         # Make question
         maked = self._make_question(text_materials, question_criteria['difficulty'])
@@ -159,9 +161,9 @@ class SingleChoiceGenerator(Agent):
         # grade_evaluated = sum(evaluated.content['evaluation'].values())
         passed = abs(grade_criteria - grade_evaluated) <= 1.5
         logger.debug(f"passed: {passed}, grade_criteria: {grade_criteria}, grade_evaluated: {grade_evaluated}")
-        
+
         return passed, grade_evaluated
-        
+
         # return not assessment.get('error') and assessment.get('question')
         
         
@@ -171,16 +173,16 @@ class SingleChoiceGenerator(Agent):
     
     def _get_weighted_combination(self, score):
         """
-        隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
-        每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
+        Randomly select a set of 7 parameter combinations that meet the conditions, considering the weight of each parameter.
+        Each parameter score is 1, 2, or 3, and the weighted sum must fall within the range of S ± 1.
 
-        權重分配：
-        - stem_cognitive_level：1.5
-        - high_distractor_count：1.2
-        - 其他特徵：1
+        Weight distribution:  
+        - stem_cognitive_level: 1.5  
+        - high_distractor_count: 1.2  
+        - Other features: 1
 
-        :param score: 目標總分
-        :return: 一組符合條件的參數組合，對應七個具體描述
+        :param score: Target total score  
+        :return: A set of parameter combinations that meet the conditions, corresponding to seven specific descriptions
         """
         
         down_score, up_score = score - 1, score + 1
@@ -217,8 +219,14 @@ class SingleChoiceGenerator(Agent):
 
     def _chat(self, prompt_text):
         messages = [
-            {"role": "system", "content": "You are a helpful exam question generator. 你所建立的題目為單選題，答案只有一個。 Please provide only one question with 繁體中文 in JSON format."},
-            {"role": "user", "content": f"{prompt_text}\nPlease response only valid JSON output. Do NOT wrap it with ``` or markdown."}
+            {"role": "system", 
+             "content": """You are a helpful exam question generator. 
+The question you created is a multiple-choice question with only one answer.
+Please respond in the same language as the content provided."""},
+            {"role": "user", 
+             "content": f"""{prompt_text}
+Please response only valid JSON output.
+Do NOT wrap it with ``` or markdown."""}
         ]
         
         response_format = {
@@ -299,9 +307,9 @@ class SingleChoiceGenerator(Agent):
     def _make_question(self, text_materials, difficulty):
         # Eddie
         # difficulty: 30, 50, 70
-        # 丙：10分 for difficulty 30
+        # 丙：12分 for difficulty 30
         # 乙：14分 for difficulty 50
-        # 甲：18分 for difficulty 70
+        # 甲：16分 for difficulty 70
         # 隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
         # 每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
         # 權重分配：- stem_cognitive_level：1.5 - high_distractor_count：1.2 - 其他特徵：1
@@ -314,23 +322,23 @@ class SingleChoiceGenerator(Agent):
         for f in features:
             logger.verbose(f)
         
-        prompt_text =  f"""
-You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
+        prompt_text =  f"""You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
 1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
 2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
 3.Do not provide explanations or analysis of the questions or answers.
-4.Output the result in a table format with the following headers:
-    - Stem
-    - Option A
-    - Option B
-    - Option C
-    - Option D
-    - Answer (only indicate the correct option: A, B, C, or D).
+4.Please respond in the same language as the text materilas provided.
+5.Output the result in a json format with the following keys:
+    - stem
+    - option_A
+    - option_B
+    - option_C
+    - option_D
+    - answer (only indicate the correct option: A, B, C, or D).
 
 Features:
 {features}
 
-Text:
+Text materilas:
 {text_materials}
 """
         question = self._chat(prompt_text)
@@ -338,7 +346,7 @@ Text:
             question = question[0]
         logger.info(f"type:{type(question)}, question: {question}")
         if question:
-            if 'A' == question.get("answer"):
+            if 'D' != question.get("answer"):
                 return self.__shuffle_options(question)
             else:
                 return question
@@ -359,10 +367,10 @@ Text:
                     start_node = rel.start_node
                     end_node = rel.end_node
                     
-                    s_id = start_node.get("name", "(unknown)") 
-                    e_id = end_node.get("name", "(unknown)") 
-                    r_type = rel.type
-                    text_segments.add(f"{s_id}{r_type}{e_id}")
+                    s_name = start_node.get("name", "(unknown)") 
+                    e_name = end_node.get("name", "(unknown)") 
+                    rel = rel.type
+                    text_segments.add(f"{s_name} {rel} {e_name}")
 
             texts = list(text_segments)
             logger.verbose(f"text_segments: {texts}")
