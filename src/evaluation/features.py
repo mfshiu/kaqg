@@ -1,4 +1,34 @@
 class ScqFeatures:
+    level_descriptions_v1 = [
+        ["Generate a short stem that is concise and straightforward, without excessive wording, clear and simple.",
+         "Generate a medium-length stem that is neither too long nor too short, ensuring it adequately expresses the problem.",
+         "Provide a detailed stem with rich content, challenging the learner's comprehension, ensuring clarity and no compromises."],
+
+        ["The stem should contain very few technical terms, ensuring it is easy to understand and not overly complex or difficult.",
+         "The stem should include a moderate number of technical terms, which should help express the problem without making it too difficult for the learner.",
+         "The stem should use a high density of technical terms, challenging the learner and prompting deeper thinking."],
+
+        ["Design the stem to test basic recall of facts or concepts only, requiring learners to remember fundamental information.",
+         "The stem should go beyond simple recall, challenging the learner's ability to understand and synthesize knowledge.",
+         "The stem should reflect higher-order thinking levels, especially analysis, creation, or evaluation. The question should stimulate deep thinking and encourage learners to make complex decisions."],
+
+        ["The option text should be short, concise, and impactful, avoiding unnecessary length or distractions.",
+         "The option text should be moderate, neither too simple nor too long, providing a certain level of challenge.",
+         "The option text should be sufficiently elaborate and challenging, avoiding overly simple or very brief options."],
+
+        ["Ensure very low similarity between the options, each option should be clearly distinguishable and not easily confused.",
+         "Ensure moderate similarity between the options, with some shared elements, but still clearly distinguishable.",
+         "Ensure very high similarity between the options, making them appear very similar, but differing in subtle details."],
+
+        ["Ensure high relevance between the stem and the options, with the options closely tied to the stem's content, almost undeniable.",
+         "The stem and options should maintain moderate relevance, with some connection, but not too obvious.",
+         "The relevance between the stem and the options should be very low, with the options only loosely related to the stem, avoiding direct connections."],
+
+        ["The options should contain one highly plausible but incorrect choice, designed to mislead learners who do not fully understand the concept.",
+         "The options should contain two very plausible but incorrect answers, designed to challenge learners by appearing correct at first glance.",
+         "Include multiple highly attractive distractors, which should seem very plausible and likely to mislead learners with incomplete understanding of the concept."]
+    ]
+
     level_descriptions = [
         ["Generate a short stem containing 5 to 15 words, no more, no less.", 
          "Generate a medium stem containing 16 to 30 words, no more, no less.", 

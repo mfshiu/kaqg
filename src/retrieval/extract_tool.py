@@ -168,7 +168,8 @@ Note: "Please respond in the same language as the content provided."
         factes = json.loads(answer_concept_and_fact[0])
 
         text = answer_concept_and_fact[1].split('entity_hierarchy = ')
-        concepts = text[0].replace('[', '').replace(']', '').replace('"', '').replace(' ', '').strip().split(',')
+        concepts = text[0].replace('[', '').replace(']', '').replace('"', '').strip().split(',')
+        # concepts = text[0].replace('[', '').replace(']', '').replace('"', '').replace(' ', '').strip().split(',')
 
         entity_hierarchy = text[1]
         # logger.verbose(f"entity_hierarchy:\n{entity_hierarchy}")
@@ -210,7 +211,7 @@ It is very important to answer all of the items within the array.
 
 
     def get_facts_pairs(self, facts, context):
-        query_get_aliases = f'''
+        facts_relations_prompt = f'''
 # entities: {facts} 
 # context: {context}
 These are the entities extracted from the context above. Please help me to extract the Knowledge Graph like entity|relationship|entity.
@@ -220,10 +221,10 @@ Following the output format below is very important. Do not return any context, 
 [15% of incineration amount|includes|incineration bottom ash produced in the 104th year across all cities]
 Note: "Please respond in the same language as the content provided."
 '''
-        answer_get_aliases = self.chat(message=query_get_aliases)
-        answer_get_aliases = ''.join(answer_get_aliases)
-        answer_get_aliases = re.sub(r'\s+', ' ', answer_get_aliases).replace(' ', '')
-        data = [item.strip("[]").split("|") for item in answer_get_aliases.split("][")]
+        facts_relations = self.chat(message=facts_relations_prompt)
+        facts_relations = ''.join(facts_relations)
+        facts_relations = re.sub(r'\s+', ' ', facts_relations) #.replace(' ', '')
+        data = [item.strip("[]").split("|") for item in facts_relations.split("][")]
         return data
 
 
@@ -239,13 +240,22 @@ class SectionPairer:
         self.res = []
 
 
-    def pair_concepts_with_facts(self, sections, entity_hierarchy, aliases_table):
+    def pair_concepts_with_facts(self, sections, entity_hierarchy, aliases_table, factes):
+        fact_set = set(factes)
+        is_a_dict = {'name': 'is_a'}
+        
         for concept, facts in entity_hierarchy.items():
             for fact in facts:
                 fact_dict = {'type': 'fact', 'name': fact, 'aliases': aliases_table.get(fact)}
-                is_a_dict = {'name': 'is_a'}
                 concept_dict = {'type': 'concept', 'name': concept, 'aliases': aliases_table.get(concept)}
                 self.res.append((fact_dict, is_a_dict, concept_dict))
+                fact_set.discard(fact)
+                # logger.warning(f"{fact} -> {concept}")
+                
+        for fact in fact_set:
+            fact_dict = {'type': 'fact', 'name': fact, 'aliases': aliases_table.get(fact)}
+            concept_dict = {'type': 'concept', 'name': 'others', 'aliases': []}
+            self.res.append((fact_dict, is_a_dict, concept_dict))
 
 
     def pair_sections_with_concepts(self, sections, concepts, aliases_table):

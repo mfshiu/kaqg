@@ -30,16 +30,16 @@ from knowsys.knowledge_graph import KnowledgeGraph
 class SingleChoiceGenerator(Agent):
     TOPIC_CREATE = "Create/SCQ/Generation"
     
-    # difficulty_mapping = {
-    #     30: 10,
-    #     50: 14,
-    #     70: 18
-    # }
     difficulty_mapping = {
-        30: 12,
+        30: 10,
         50: 14,
-        70: 16
+        70: 18
     }
+    # difficulty_mapping = {
+    #     30: 12,
+    #     50: 14,
+    #     70: 16
+    # }
     weights = [1, 1, 1.5, 1, 1, 1, 1.2] # 定義各參數的權重  
 
     def __init__(self, config:dict):
@@ -120,8 +120,9 @@ class SingleChoiceGenerator(Agent):
         # Generate text materials
         ranker = SimpleRanker(self, subject, document, section)
         # ranker = WeightedRanker(self, qc['subject'], qc['document'], qc['section'])
+        count = question_criteria.get('difficulty', 30) // 3
         text_materials = []
-        for _ in range(10):
+        for _ in range(count):
             core_concept = ranker.rank_concepts(concepts)
             facts = ranker.rank_facts(core_concept)
             logger.verbose(f"facts: {', '.join([n['name'] for n in facts])}")
@@ -129,7 +130,7 @@ class SingleChoiceGenerator(Agent):
                 continue
 
             text_materials.extend(self._generate_text_materials(subject, facts))
-            if len(text_materials) >= 10:
+            if len(text_materials) >= count:
                 break
             
         logger.debug(f"text_materials: {text_materials}")
@@ -140,9 +141,11 @@ class SingleChoiceGenerator(Agent):
             # return assessment
         
         # Make question
-        maked = self._make_question(text_materials, question_criteria['difficulty'])
+        maked, feature_levels = self._make_question(text_materials, question_criteria['difficulty'])
         if maked:
             assessment['question'] = maked
+            assessment['question_criteria']['feature_levels'] = feature_levels
+            assessment['question_criteria']['weighted_grade'] = sum(x * w for x, w in zip(feature_levels.values(), SingleChoiceGenerator.weights))
             return assessment
         else:
             return None
@@ -188,7 +191,7 @@ class SingleChoiceGenerator(Agent):
         down_score, up_score = score - 1, score + 1
         if up_score < (sw:=sum(SingleChoiceGenerator.weights)) or down_score > sw * 3:
             return [0] * 7
-        
+
         all_comnination = list(product(range(1, 4), repeat=7))
         random.shuffle(all_comnination)
 
@@ -304,6 +307,7 @@ Do NOT wrap it with ``` or markdown."""}
         new_question["answer"] = correct_new_key
         return new_question
 
+
     def _make_question(self, text_materials, difficulty):
         # Eddie
         # difficulty: 30, 50, 70
@@ -316,18 +320,20 @@ Do NOT wrap it with ``` or markdown."""}
 
         score = SingleChoiceGenerator.difficulty_mapping[difficulty]
         combination = self._get_weighted_combination(score)
-        logger.verbose(f"combination: {combination}")
-        features = self._generate_features_prompt(combination)
-        logger.verbose(f"features:")
-        for f in features:
-            logger.verbose(f)
+        logger.verbose(f"combination: {combination}")        
+        feature_descs = self._generate_features_prompt(combination)
+        features_text = '\n'.join(feature_descs)
+        # logger.verbose(f"feature_descs: {features_text}")
+        
+        materials_text = '\n'.join(text_materials[:50])
         
         prompt_text =  f"""You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
 1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
 2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
 3.Do not provide explanations or analysis of the questions or answers.
 4.Please respond in the same language as the text materilas provided.
-5.Output the result in a json format with the following keys:
+5.All content in the question, including the stem and options, must be derived from the material text.
+6.Output the result in a json format with the following keys:
     - stem
     - option_A
     - option_B
@@ -336,22 +342,22 @@ Do NOT wrap it with ``` or markdown."""}
     - answer (only indicate the correct option: A, B, C, or D).
 
 Features:
-{features}
+{features_text}
 
 Text materilas:
-{text_materials}
+{materials_text}
 """
+        logger.verbose(f"prompt_text:\n{prompt_text}")
         question = self._chat(prompt_text)
         if isinstance(question, list):
             question = question[0]
         logger.info(f"type:{type(question)}, question: {question}")
         if question:
             if 'D' != question.get("answer"):
-                return self.__shuffle_options(question)
-            else:
-                return question
+                question = self.__shuffle_options(question)
+            return question, combination
         else:
-            return None
+            return None, None
     
     
     def _generate_text_materials(self, subject, fact_nodes):

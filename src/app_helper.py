@@ -135,17 +135,6 @@ def ensure_local_copy(gvfs_path):
             os.remove(local_pdf_path)
 
 
-def fix_json(json_text):
-    # Remove Markdown wrapping
-    if json_text.startswith("```json") or json_text.startswith("```"):
-        json_text = json_text.strip("`").split('\n', 1)[-1].rsplit('\n', 1)[0]
-
-    last_valid_index = max(json_text.rfind("}"), json_text.rfind("]"))
-    json_fixed = json_text[:last_valid_index+1]
-
-    return json_fixed
-
-
 def fix_json_keys(obj):
     if isinstance(obj, dict):
         new_obj = {}
@@ -158,14 +147,45 @@ def fix_json_keys(obj):
         return [fix_json_keys(item) for item in obj]
     else:
         return obj
+
+
+def fix_json(json_text):
+    # Remove Markdown wrapping (if present)
+    if json_text.startswith("```json") or json_text.startswith("```"):
+        json_text = json_text.strip("`").split('\n', 1)[-1].rsplit('\n', 1)[0]
     
+    # Fix internal quotes (escape unescaped quotes inside strings)
+    # This regex ensures any double quotes inside strings are escaped
+    json_text = re.sub(r'\"([^\"]+)\"', r'\"\\\"\1\\\"\"', json_text)
+
+    # Ensure the JSON text has a valid ending
+    last_valid_index = max(json_text.rfind("}"), json_text.rfind("]"))
+    json_fixed = json_text[:last_valid_index + 1]
+
+    # Strip any unnecessary whitespace at the beginning or end
+    json_fixed = json_fixed.strip()
     
+    return json_fixed
+
+
 def load_json(json_text):
     try:
+        # Try to directly load the JSON first
         return json.loads(json_text)
     except json.JSONDecodeError as e:
-        return json.loads(fix_json(json_text))
-    
+        # If there's a JSONDecodeError, attempt to fix the JSON string
+        _logger.warning(f"JSONDecodeError: {e}. Attempting to fix JSON.")
+        fixed_json_text = fix_json(json_text)
+        try:
+            return json.loads(fixed_json_text)
+        except json.JSONDecodeError as e:
+            _logger.error(f"Failed to parse fixed JSON: {e}")
+            return None  # Returning None if still unable to parse
+    except Exception as e:
+        # Handle unexpected errors
+        _logger.exception(f"Unexpected error: {e}")
+        return None
+        
     
 def get_log_level(level):
     levels = {

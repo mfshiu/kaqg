@@ -33,7 +33,7 @@ import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 
 import argparse
-import ast
+import csv
 import signal
 import os
 import time
@@ -47,15 +47,16 @@ is_running = True
 
 
 
-class ExecutionAgent(Agent):
+class QuizBankMaker(Agent):
     def __init__(self, config):
         super().__init__(name='execution', agent_config=config)
-
-
-    def on_activate(self):
+        self.quiz_bank = []  # Initialize an empty list to store quiz questions
+        
+        
+    def _gen_quiz(self):
         topic_return = 'Return/' + self.agent_id
         self.subscribe(topic_return)
-        
+
         question_criteria = {
             'question_id': f'Q{int(time.time())}',                                      # 使用者自訂題目 ID
             'subject': self.config['subject'],                                          # 考試科目(KG Name)
@@ -66,84 +67,109 @@ class ExecutionAgent(Agent):
         self.publish(SingleChoiceGenerator.TOPIC_CREATE, TextParcel(question_criteria, topic_return))
 
 
+    def on_activate(self):
+        topic_return = 'Return/' + self.agent_id
+        self.subscribe(topic_return)
+
+        self._gen_quiz()
+
+
     def on_message(self, topic: str, pcl: Parcel):
-        # pcl:
-        # {
-        #     "version": 3,
-        #     "content": {
-        #         "question_criteria": {
-        #             "question_id": "Q1744696625",
-        #             "subject": "Question_01",
-        #             "section": null,
-        #             "document": "Q01",
-        #             "difficulty": 50
-        #         },
-        #         "question": {
-        #             "stem": "What is the duration of the performance mentioned in the text?",
-        #             "option_A": "Twenty minutes",
-        #             "option_B": "One hour",
-        #             "option_C": "Fifteen minutes",
-        #             "option_D": "Thirty minutes",
-        #             "answer": "A"
-        #         }
-        #     },
-        #     "topic_return": null,
-        #     "error": null
-        # }        
+        """Example of pcl:
+        {
+            "version": 3,
+            "content": {
+                "question_criteria": {
+                    "question_id": "Q1744699538",
+                    "subject": "Question_01",
+                    "section": null,
+                    "document": "Q01",
+                    "difficulty": 50,
+                    "feature_levels": {
+                        "stem_length": 1,
+                        "stem_technical_term_density": 1,
+                        "stem_cognitive_level": 3,
+                        "option_average_length": 3,
+                        "option_similarity": 2,
+                        "stem_option_similarity": 1,
+                        "high_distractor_count": 1
+                    },
+                    "weighted_grade": 13.7
+                },
+                "question": {
+                    "stem": "What is indicated by the audience's reaction during the performance?",
+                    "option_A": "Care is taken in the performance",
+                    "option_B": "Purists react with disgust",
+                    "option_C": "Thoughtfulness is shown through depth",
+                    "option_D": "Joyous roller coaster of a ride is experienced",
+                    "answer": "B"
+                }
+            },
+            "topic_return": null,
+            "error": null
+        }"""
         print(self.M(f"topic: {topic}\npcl:\n{pcl}"))
-        self.terminate()
+        
+        qc = pcl.content['question_criteria']
+        qn = pcl.content['question']
+        
+        question_text = f"{qn['stem']}\n\nA: {qn['option_A']}\nB: {qn['option_B']}\nC: {qn['option_C']}\nD: {qn['option_D']}\n"
+        quiz = [qc['subject'], question_text, qn['answer']]
+        quiz.extend(qc['feature_levels'].values())
+        quiz.append(qc['weighted_grade'])
+        self.quiz_bank.append(quiz)
+        print(f"({len(self.quiz_bank)}) Quiz: {quiz}")
+        
+        if len(self.quiz_bank) < self.config['number_of_quizzes']:
+            self._gen_quiz()
+        else:
+            header = ['Passage', 'Question Text', 'Answer', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'Grade']
+            with open(self.config['output'], 'w', encoding='utf-8', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(header)
+                w.writerows(self.quiz_bank)
+            self.terminate()
 
 
-def generate_question(subject, document, chapter, difficulty):
-    """
-    Generate a question based on the subject, chapter, and difficulty level.
-    parameters:
-    subject (str): The name of the subject (e.g., "Math")
-    document (str): The name of the document (e.g., "Wastepro02")
-    chapter (str): The name of the chapter (e.g., "Chapter 1")
-    difficulty (int): The difficulty level (1: Easy, 2: Medium, 3: Difficult)    
-    """
-
+def generate_quizbank(args:dict):
     config = app_helper.get_agent_config()
-    config['subject'] = subject
-    config['document'] = document
-    config['chapter'] = chapter
-    config['difficulty'] = difficulty
-    agent = ExecutionAgent(config)
+    config.update(args)
+    agent = QuizBankMaker(config)
     agent.start_thread()
 
-    timeout_seconds = 30
+    timeout_seconds = 300
     while is_running and timeout_seconds and agent.is_active():
         time.sleep(1)
         timeout_seconds -= 1
-        print(f"Countdown: {timeout_seconds}", end="\r", flush=True)
+        print(f"Countdown: {timeout_seconds}  ", end="\r", flush=True)
     print()
+
     if agent.is_active():
         agent.terminate()
         print(f"Timeout: The process has been terminated.")
 
-    print(f"Question generation completed.")
+    print(f"Completed.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate SCQ Questions")
+    parser = argparse.ArgumentParser(description="Generate Exam Questions Bank")
     parser.add_argument('-s', '--subject', type=str, required=True, help='Subject name (e.g., "Math")')
     parser.add_argument('-doc', '--document', type=str, required=True, help='Document name (e.g., "Wastepro02")')
     parser.add_argument('-c', '--chapter', type=str, help='Chapter name (e.g., "Chapter 1")')
     parser.add_argument('-d', '--difficulty', type=int, default=2, help='1: Easy, 2: Medium, 3: Difficult')
+    parser.add_argument('-n', '--number_of_quizzes', type=int, default=10, help='Number of quizzes to generate (default: 10)')
+    parser.add_argument('-o', '--output', type=str, default=f'quizbank-{time.time()}.csv', help='Output file name (default: quizbank-<timestamp>.csv)')
 
     args = parser.parse_args()
-    print(f"Generating SCQ for Subject: {args.subject}, Document: {args.document}, Chapter: {args.chapter}, Difficulty: {args.difficulty}")
-    
+    print(f"Generating Exam Questions Bank for Subject: {args.subject}, Document: {args.document}, Chapter (optional): {args.chapter}, Difficulty: {args.difficulty}")
+
     if args.difficulty < 1 or args.difficulty > 3:
         print("Error: Difficulty level must be between 1 and 3.")
         return
     
-    print("Please wait...")
-
-    question = generate_question(args.subject, args.document, args.chapter, args.difficulty)
-    print(f"Generated Question:\n{question}\n")
-    print("Finished generating SCQ questions.")
+    quizbank_file = generate_quizbank(vars(args))
+    print(f"Generated Quizbank File: {quizbank_file}")
+    print("\nDone.")
 
 
 if __name__ == '__main__':
