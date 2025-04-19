@@ -114,7 +114,7 @@ class QuizBankMaker(Agent):
         qn = pcl.content['question']
         
         question_text = f"{qn['stem']}\n\nA: {qn['option_A']}\nB: {qn['option_B']}\nC: {qn['option_C']}\nD: {qn['option_D']}\n"
-        quiz = [qc['subject'], question_text, qn['answer']]
+        quiz = [qc['document'], question_text, qn['answer']]
         quiz.extend(qc['feature_levels'].values())
         quiz.append(qc['weighted_grade'])
         self.quiz_bank.append(quiz)
