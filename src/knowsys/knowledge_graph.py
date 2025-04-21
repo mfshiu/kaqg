@@ -299,6 +299,7 @@ class KnowledgeGraph:
 
     def query_subsections(self, document, section_path=None):
         def _query_subsections(self, document, section_path=None):
+            logger.verbose(f"Querying subsections for document: {document}, section_path: {section_path}")
             
             def fetch_all_subsections(session, parent_path):
                 query = """
@@ -320,7 +321,20 @@ class KnowledgeGraph:
             
             
             with self.driver.session() as session:
-                if section_path is None:
+                if section_path:
+                    initial_nodes = []
+                    for section in section_path:
+                        query = """
+                        MATCH (sec:structure {name: $section})
+                        RETURN sec
+                        """
+                        result = session.run(query, section=section)
+                        node = result.single()["sec"]
+                        if node:
+                            initial_nodes.append(node)
+                    
+                    return fetch_all_subsections(session, initial_nodes)
+                else:
                     query = """
                     MATCH (doc:document {name: $document})
                     OPTIONAL MATCH (sec:structure)-[:part_of]->(doc)
@@ -334,19 +348,6 @@ class KnowledgeGraph:
                         for section in sections:
                             all_paths.extend(fetch_all_subsections(session, [section]))
                     return all_paths
-                else:
-                    initial_nodes = []
-                    for section in section_path:
-                        query = """
-                        MATCH (sec:structure {name: $section})
-                        RETURN sec
-                        """
-                        result = session.run(query, section=section)
-                        node = result.single()["sec"]
-                        if node:
-                            initial_nodes.append(node)
-                    
-                    return fetch_all_subsections(session, initial_nodes)
     
         sectionss = _query_subsections(self, document, section_path)
         return [self.serialize_node(sections[-1]) for sections in sectionss]

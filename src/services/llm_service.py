@@ -58,21 +58,19 @@ class LlmService(Agent):
             llm = ChatLLM(params)
         
         return llm
-
+    
 
     def on_activate(self):
         self.llm:BaseLLM = LlmService._generate_llm_model(self.llm_params)
-    
-
-    def on_connected(self):
+        
         self.subscribe(LlmService.TOPIC_LLM_PROMPT, "str", self.handle_prompt)
 
 
     def handle_prompt(self, topic:str, pcl:TextParcel):
-        prompt_info = pcl.content
-        logger.verbose(f"prompt_info: {prompt_info}")
+        params = pcl.content
+        logger.verbose(f"params: {params}")
 
-        response = self.llm.generate_response(prompt_info.get('prompt'))
+        response = self.llm.generate_response(params)
         logger.debug(self.M(response))
 
         return {

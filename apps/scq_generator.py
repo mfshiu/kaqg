@@ -1,5 +1,4 @@
 import os, sys
-import argparse
 from itertools import product
 import random
 from openai import OpenAI
@@ -7,6 +6,8 @@ import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
+
+from evaluation.features import ScqFeatures
 
 
 
@@ -23,7 +24,7 @@ class GetSCQGeneratorPrompt:
         self.model = model
 
 
-    def _get_one_weighted_combination(self, score):
+    def _get_weighted_combination(self, score):
         """
         隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
         每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
@@ -53,41 +54,26 @@ class GetSCQGeneratorPrompt:
                 valid_combination = combination
                 break
 
-        # 隨機選取一組並命名參數
-        selected = valid_combination
-        result = {
-            "stem_length": selected[0],
-            "stem_technical_term_density": selected[1],
-            "stem_cognitive_level": selected[2],
-            "option_average_length": selected[3],
-            "option_similarity": selected[4],
-            "stem_option_similarity": selected[5],
-            "high_distractor_count": selected[6],
-        }
-        return result
-    
-    
-    def _generate_prompt(self, parameters):
-        """
-        根據參數分數和特徵表，自動生成出題敘述。
-        :param parameters: 包含 7 個特徵的分數，格式為字典
-        :return: 題目敘述
-        """
-        descs = [["題幹字數較短（10 至 25 字）", "題幹字數中等（15 至 35 字之間）", "題幹字數較長（超過 20 字）"],
-                ["題幹使用較少或無專業術語（0 至 2 個）", "題幹有適當的專業術語（2 至 4 個）", "題幹使用了較多專業術語（3 個以上）"],
-                ["僅需記憶知識點", "涉及知識點的理解與綜合", "需進行分析、綜合或評估"],
-                ["選項文字較短（1 至 5 字）", "選項文字中等（3 至 8 字之間）", "選項文字較長（5 字以上）"],
-                ["選項間相似度較低（30% 以下）", "選項間相似度適中（45% 左右）", "選項間有較高相似度（60% 以上）"],
-                ["題幹與選項內容相關性較低（30% 以下）", "題幹與選項內容相關性適中（45% 左右）", "題幹與選項內容高度相關（60% 以上）"],
-                ["包含 1 個高誘答選項", "包含 2 個高誘答選項", "包含 3 個以上的高誘答選項"]]
-        keys = ["stem_length", "stem_technical_term_density", "stem_cognitive_level", "option_average_length", "option_similarity", "stem_option_similarity", "high_distractor_count"]
-        titles = ["題幹字數", "題幹專業詞密度", "認知程度", "選項平均字數", "選項間相似度", "題幹與選項相似度", "高誘答選項數"]
-        
-        prompt = (f'{titles[i]}：{descs[i][parameters[keys[i]] - 1]}' for i in range(7))
-        return prompt  
+        keys = ScqFeatures.keys
 
+        return dict(zip(keys, valid_combination))
     
-    def _chat(self, message):
+    
+    def _generate_features_prompt(self, parameters):
+        """
+        Automatically generates a question description based on parameter scores and feature table.
+        :param parameters: A dictionary containing scores for 7 features
+        :return: Question description
+        """
+        descs = ScqFeatures.level_descriptions
+        keys = ScqFeatures.keys
+        titles = ScqFeatures.titles
+
+        prompt = (f'{titles[i]}: {descs[i][parameters[keys[i]] - 1]}' for i in range(len(keys)))
+        return prompt
+
+
+    def _chat(self, prompt_text):
         """
         Send a message to the GPT model and get the response.
         
@@ -101,8 +87,8 @@ class GetSCQGeneratorPrompt:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant. Please provide your response in JSON format."},
-                {"role": "user", "content": message + " Please provide your response in JSON format."}
+                {"role": "system", "content": "You are a helpful exam question generator. Please provide your response in JSON format."},
+                {"role": "user", "content": f"{prompt_text}\nPlease provide your response in JSON format."}
             ],
             response_format={
                 "type": "json_schema",
@@ -135,34 +121,39 @@ class GetSCQGeneratorPrompt:
         )
         return response.choices[0].message.content
     
-    def generate_scq(self, score, text)-> dict:
-        parameter = self._get_one_weighted_combination(score)
-        features = self._generate_prompt(parameter)
+    
+    def generate_scq(self, score, text_materials)-> dict:
+        parameter = self._get_weighted_combination(score)
         
-        prompt_test =  """
-                        You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
-                        1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
-                        2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
-                        3.Do not provide explanations or analysis of the questions or answers.
-                        4.Output the result in a table format with the following headers:
-                            - Stem
-                            - Option A
-                            - Option B
-                            - Option C
-                            - Option D
-                            - Answer (only indicate the correct option: A, B, C, or D).
+        from evaluation import scq_feature_criteria
+        features = self._generate_features_prompt(parameter)
+        
+        prompt_text =  f"""
+You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
+1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
+2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
+3.Do not provide explanations or analysis of the questions or answers.
+4.Output the result in a table format with the following headers:
+    - Stem
+    - Option A
+    - Option B
+    - Option C
+    - Option D
+    - Answer (only indicate the correct option: A, B, C, or D).
 
-                        Features:{}
+Features:
+{features}
 
-                        Text:{}
-                        """.format(features, text)
-        answer_concept_and_fact = self._chat(message=prompt_test)
+Text:
+{text_materials}
+"""
+        answer_concept_and_fact = self._chat(prompt_text)
         json_response = json.loads(answer_concept_and_fact)
         return json_response
     
 
 if __name__ == "__main__":
-    tripletes = f"""廢棄物超過環境承載力
+    text_materials = f"""廢棄物超過環境承載力
 
     廢棄物分類為一般廢棄物與事業廢棄物
 
@@ -194,7 +185,7 @@ if __name__ == "__main__":
     api_key=app_helper.config['service']['llm']['openai_api_key']
     generator = GetSCQGeneratorPrompt(api_key)
 
-    res = generator.generate_scq(score, tripletes)
+    res = generator.generate_scq(score, text_materials)
     print(res)
 
 

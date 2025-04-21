@@ -1,3 +1,25 @@
+"""
+文件名稱：document_ingest.py
+
+功能說明：
+本程式為文件導入工具，負責將 PDF 文件（及其章節目錄 TOC）上傳至知識圖譜系統。系統基於 Agent 架構設計，
+透過訂閱與發布機制，協助文件解析與建構語意知識。可從命令列指定任務參數進行導入任務。
+
+主要功能：
+1. 支援命令列參數以指定文件路徑、主題名稱（subject_name）、章節目錄（TOC）檔案。
+2. 使用 AgentFlow 框架的 Agent 機制執行導入任務。
+3. 將文件內容包裝為 BinaryParcel，並透過發佈機制送出給 PdfRetriever 處理。
+4. 可透過 Ctrl+C 中斷任務執行。
+
+使用方法：
+python document_ingest.py ingest -subject_name <主題名稱> -file_path <文件路徑> [-toc <TOC檔案路徑>]
+
+參數說明：
+- subject_name：導入知識的主題名稱，會作為知識圖譜分類。
+- file_path：PDF 文件檔案路徑。
+- toc：選填，用 pprint 格式編寫的章節目錄 TOC 檔案路徑。
+"""
+
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
@@ -25,6 +47,7 @@ class ExecutionAgent(Agent):
         self.subject_name = config['subject_name']
         self.file_path = config['file_path']
         self.toc = toc  
+        
         
     def _ingest_document(self):
         self.subscribe(PdfRetriever.TOPIC_RETRIEVED)
@@ -133,9 +156,9 @@ def main():
 
 if __name__ == '__main__':
     def signal_handler(signal, frame):
+        print("Ctrl-C for Exiting...")
         global is_running
         is_running = False
-        print("Ctrl-C for Exiting...")
     signal.signal(signal.SIGINT, signal_handler)
 
     main()

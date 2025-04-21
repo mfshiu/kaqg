@@ -69,79 +69,97 @@ class FactConceptExtractor:
 
 
     def get_concept_n_fact(self, context):
-        query_concept_and_fact =f'''
-    Please structure the following context into triplets. The context will be divided into two levels: fact and concept. A fact refers to all entities that can be found in the context, while a concept refers to the higher-level categories of those facts.
+        query_concept_and_fact = f'''
+Please structure the following context into triplets. 
+The context will be divided into two levels: fact and concept. 
+A fact refers to all entities that can be found in the context, 
+while a concept refers to the higher-level categories of those facts.
 
-    For example:
-    "104 年全國各縣市焚化底渣產量約占焚化量之 15%，因其性質較無害，故為減少掩埋場負荷及推動資源回收再利用，環境部已提供經費補助，鼓勵縣市政府進行分選後供為營建替代級配材料再利用，目前基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用，經統計 104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%，其餘非採再利用部分則以掩埋方式進行最終處置。"
+For example:
+"In the 104th year, the incineration bottom ash produced by various counties and cities accounted 
+for about 15% of the incineration amount. 
+Due to its relatively harmless nature, to reduce landfill load and promote resource recycling, 
+the Ministry of Environment has provided funding to encourage local governments 
+to sort and reuse it as alternative construction materials. 
+Currently, cities such as Keelung, Taipei, New Taipei, Taoyuan, Hsinchu, Miaoli, Taichung, Changhua, Chiayi, 
+Chiayi County, Tainan, Kaohsiung, and Pingtung have outsourced the reuse of incineration bottom ash. 
+According to statistics, the amount of reused bottom ash in 104th year accounted 
+for 89.3% of the total bottom ash produced that year, and the rest was disposed of by landfill."
 
-    This can be broken down into the following facts and concepts, and each fact need to be category as one concepts like result show in entity_hierarchy:
-    facts = [
-        "104 年",
-        "15%",
-        "89.3%",
-        "環境部",
-        "基隆市",
-        "臺北市",
-        "新北市",
-        "桃園市",
-        "新竹市",
-        "苗栗縣",
-        "臺中市",
-        "彰化縣",
-        "嘉義市",
-        "嘉義縣",
-        "臺南市",
-        "高雄市",
-        "屏東縣",
-        "焚化底渣",
-        "掩埋場",
-        "資源回收再利用",
-        "營建替代級配材料",
-        "焚化廠",
-        "一般廢棄物",
-        "底渣",
-        "分選",
-        "再利用",
-        "掩埋",
-        "最終處置"]
+This can be broken down into the following facts and concepts, and each fact needs to be categorized 
+as one concept, as shown in the entity_hierarchy:
+facts = [
+    "104th year",
+    "15%",
+    "89.3%",
+    "Ministry of Environment",
+    "Keelung City",
+    "Taipei City",
+    "New Taipei City",
+    "Taoyuan City",
+    "Hsinchu City",
+    "Miaoli County",
+    "Taichung City",
+    "Changhua County",
+    "Chiayi City",
+    "Chiayi County",
+    "Tainan City",
+    "Kaohsiung City",
+    "Pingtung County",
+    "incineration bottom ash",
+    "landfill",
+    "resource recycling",
+    "alternative construction materials",
+    "incineration plant",
+    "general waste",
+    "bottom ash",
+    "sorting",
+    "reuse",
+    "landfilling",
+    "final disposal"
+]
 
-    concepts = [
-        "年份",
-        "百分比",
-        "政府機構",
-        "城市",
-        "縣",
-        "廢棄物",
-        "設施",
-        "廢棄物管理",
-        "建材",
-        "廢棄物處理"]
-        
-    entity_hierarchy = {{
-                        "年份": ["104 年"],
-                        "百分比": ["15%", "89.3%"],
-                        "政府機構": ["環境部"],
-                        "城市": [
-                            "基隆市", "臺北市", "新北市", "桃園市", "新竹市",
-                            "臺中市", "嘉義市", "臺南市", "高雄市"
-                        ],
-                        "縣": ["苗栗縣", "彰化縣", "嘉義縣", "屏東縣"],
-                        "廢棄物": ["焚化底渣", "一般廢棄物", "底渣"],
-                        "設施": ["掩埋場", "焚化廠"],
-                        "廢棄物管理": ["資源回收再利用"],
-                        "建材": ["營建替代級配材料"],
-                        "廢棄物處理": ["分選", "再利用", "掩埋", "最終處置"]
-                        }}
-    please following the rule as above and help me to extract the facts and concept from new context following the output format.
-    # context:
-    {context}
-    Following the output format as below is very important do not return any context just output.
-    # output format:
-    facts = []
-    concepts = []
-    entity_hierarchy = {{concept1:[fact_a, fact_b]}}
-    '''
+concepts = [
+    "year",
+    "percentage",
+    "government organization",
+    "city",
+    "county",
+    "waste",
+    "facility",
+    "waste management",
+    "construction materials",
+    "waste treatment"
+]
+
+entity_hierarchy = {{
+                    "year": ["104th year"],
+                    "percentage": ["15%", "89.3%"],
+                    "government organization": ["Ministry of Environment"],
+                    "city": [
+                        "Keelung City", "Taipei City", "New Taipei City", "Taoyuan City", "Hsinchu City",
+                        "Taichung City", "Chiayi City", "Tainan City", "Kaohsiung City"
+                    ],
+                    "county": ["Miaoli County", "Changhua County", "Chiayi County", "Pingtung County"],
+                    "waste": ["incineration bottom ash", "general waste", "bottom ash"],
+                    "facility": ["landfill", "incineration plant"],
+                    "waste management": ["resource recycling"],
+                    "construction materials": ["alternative construction materials"],
+                    "waste treatment": ["sorting", "reuse", "landfilling", "final disposal"]
+                    }}
+
+Please follow the rule as above and help me to extract the facts and concepts from the new context following the output format.
+# context:
+{context}
+
+Following the output format below is very important. Do not return any context, just output.
+# output format:
+facts = []
+concepts = []
+entity_hierarchy = {{concept1:[fact_a, fact_b]}}
+
+Note: "Please respond in the same language as the content provided."
+'''
         answer_concept_and_fact = self.chat(message=query_concept_and_fact)
         answer_concept_and_fact = ''.join(answer_concept_and_fact)
         answer_concept_and_fact = re.sub(r'\s+', ' ', answer_concept_and_fact)
@@ -150,7 +168,8 @@ class FactConceptExtractor:
         factes = json.loads(answer_concept_and_fact[0])
 
         text = answer_concept_and_fact[1].split('entity_hierarchy = ')
-        concepts = text[0].replace('[', '').replace(']', '').replace('"', '').replace(' ', '').strip().split(',')
+        concepts = text[0].replace('[', '').replace(']', '').replace('"', '').strip().split(',')
+        # concepts = text[0].replace('[', '').replace(']', '').replace('"', '').replace(' ', '').strip().split(',')
 
         entity_hierarchy = text[1]
         # logger.verbose(f"entity_hierarchy:\n{entity_hierarchy}")
@@ -158,50 +177,54 @@ class FactConceptExtractor:
             entity_hierarchy = json.loads(app_helper.fix_json(entity_hierarchy))
         except Exception as e:
             raise ValueError(f"""{e}
-Error in parsing entity_hierarchy:
-{entity_hierarchy}
+    Error in parsing entity_hierarchy:
+    {entity_hierarchy}
 
-answer_concept_and_fact:
-{answer_concept_and_fact}""")
+    answer_concept_and_fact:
+    {answer_concept_and_fact}""")
 
         return factes, concepts, entity_hierarchy
 
 
     def get_aliases(self, aliases_keys):
         query_get_aliases = f'''
-                            Please provide me with the aliases for each item in the array mentioned below. The aliases must be in English. Return them in the format of a dictionary, without including any additional context outside of the dictionary. It is very important to answer all of th items within array.
-                            # array:
-                            {aliases_keys}
-                            # example:
-                            {{"申請書": ["application form","formulario de solicitud"]}}
-                            '''
+Please provide me with the aliases for each item in the array mentioned below. 
+The aliases must be in English. 
+Return them in the format of a dictionary, without including any additional context outside of the dictionary. 
+It is very important to answer all of the items within the array.
+# array:
+{aliases_keys}
+# example:
+{{"application form": ["application form","formulario de solicitud"]}}
+'''
         answer_get_aliases = self.chat(message=query_get_aliases)
         answer_get_aliases = ''.join(answer_get_aliases)
         answer_get_aliases = re.sub(r'\s+', ' ', answer_get_aliases).replace(' ', '')
-        
+
         try:
             aliases_table = json.loads(answer_get_aliases)
         except Exception as e:
             logger.exception(e)
             aliases_table = {}
-            
+
         return aliases_table
 
 
     def get_facts_pairs(self, facts, context):
-        query_get_aliases = f'''
+        facts_relations_prompt = f'''
 # entities: {facts} 
 # context: {context}
-These are the entities extract from the context above. Please help me to extract the Knowledge Graph like entity-relationship-entity.
-Following the output format as below is very important do not return any context just output.
+These are the entities extracted from the context above. Please help me to extract the Knowledge Graph like entity|relationship|entity.
+Following the output format below is very important. Do not return any context, just output.
 # output:
-[桃園市-委外再利用-焚化廠底渣]
-[焚化量之 15%-包含-104 年全國各縣市焚化底渣產量]
+[Taoyuan City|outsourced reuse|incineration plant bottom ash]
+[15% of incineration amount|includes|incineration bottom ash produced in the 104th year across all cities]
+Note: "Please respond in the same language as the content provided."
 '''
-        answer_get_aliases = self.chat(message=query_get_aliases)
-        answer_get_aliases = ''.join(answer_get_aliases)
-        answer_get_aliases = re.sub(r'\s+', ' ', answer_get_aliases).replace(' ', '')
-        data = [item.strip("[]").split("-") for item in answer_get_aliases.split("][")]
+        facts_relations = self.chat(message=facts_relations_prompt)
+        facts_relations = ''.join(facts_relations)
+        facts_relations = re.sub(r'\s+', ' ', facts_relations) #.replace(' ', '')
+        data = [item.strip("[]").split("|") for item in facts_relations.split("][")]
         return data
 
 
@@ -217,13 +240,22 @@ class SectionPairer:
         self.res = []
 
 
-    def pair_concepts_with_facts(self, sections, entity_hierarchy, aliases_table):
+    def pair_concepts_with_facts(self, sections, entity_hierarchy, aliases_table, factes):
+        fact_set = set(factes)
+        is_a_dict = {'name': 'is_a'}
+        
         for concept, facts in entity_hierarchy.items():
             for fact in facts:
                 fact_dict = {'type': 'fact', 'name': fact, 'aliases': aliases_table.get(fact)}
-                is_a_dict = {'name': 'is_a'}
                 concept_dict = {'type': 'concept', 'name': concept, 'aliases': aliases_table.get(concept)}
                 self.res.append((fact_dict, is_a_dict, concept_dict))
+                fact_set.discard(fact)
+                # logger.warning(f"{fact} -> {concept}")
+                
+        for fact in fact_set:
+            fact_dict = {'type': 'fact', 'name': fact, 'aliases': aliases_table.get(fact)}
+            concept_dict = {'type': 'concept', 'name': 'others', 'aliases': []}
+            self.res.append((fact_dict, is_a_dict, concept_dict))
 
 
     def pair_sections_with_concepts(self, sections, concepts, aliases_table):
@@ -235,7 +267,8 @@ class SectionPairer:
             concepts (list): List of identified concepts
             aliases_table (dict): Mapping of terms to their aliases
         """
-        structure_dict = {'type': 'structure', 'name': sections[-1][-1]}
+        structure_type = 'document' if len(sections) == 1 else 'structure'
+        structure_dict = {'type': structure_type, 'name': sections[-1][-1]}
         include_in_dict = {'name': 'include_in'}
         
         for concept in concepts:
@@ -266,6 +299,9 @@ class SectionPairer:
             facts_pair (list): List of fact pairs to be related
         """
         for pair in facts_pair:
+            if len(pair) != 3:
+                logger.warning(f"Skip for wrong facts relation: {pair}")
+                continue
             try:
                 fact1 = pair[0]
                 relatioship = pair[1]
