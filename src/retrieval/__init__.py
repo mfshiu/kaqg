@@ -1,4 +1,4 @@
-def ensure_size(string: str, max_length: int = 300) -> str:
+def part_str(string: str, max_length: int = 300) -> str:
     if len(string) <= max_length:
         return string
     else:

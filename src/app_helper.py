@@ -1,6 +1,8 @@
 from datetime import datetime
+import json
 from pathlib import Path
 import os
+import re
 import signal
 import time
 
@@ -55,9 +57,8 @@ def initialize(module_name=None):
 def _init_logging(config):
     log_name = "wastepro"
     log_path = os.path.join(os.getcwd(), '_log', f'{log_name}.log')
-    # if os.path.exists(log_path):
-    #     os.remove(log_path)
     log_level = logging.DEBUG    
+
     if cfg := config.get('logging'):
         log_name = cfg.get("name", log_name)
         log_path = cfg.get("path", log_path)
@@ -75,9 +76,16 @@ def _init_logging(config):
     datefmt = '%m-%d %H:%M:%S'
     console_formatter = ColorFormatter(fmt, datefmt)
     file_formatter = logging.Formatter(fmt, datefmt)
-    
+
     # File handler
-    file_handler = TimedRotatingFileHandler(log_path, when="d", encoding="utf-8", backupCount=0)
+    file_handler = TimedRotatingFileHandler(
+        log_path,
+        when="d",
+        encoding="utf-8",
+        backupCount=0,
+        delay=True,                 # 延遲寫入，避免程式啟動時就創建檔案
+        errors='backslashreplace'   # 防止特殊字元寫入錯誤
+    )
     file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
@@ -86,13 +94,12 @@ def _init_logging(config):
     console_handler.setLevel(log_level)
     console_handler.setFormatter(console_formatter)
 
-    # 避免重複添加 handler
+    # 設定 logger
     logger = logging.getLogger(log_name)
     logger.handlers.clear()
-    logger.propagate = False    # 避免被加入 default handler
+    logger.propagate = False
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
-
     logger.setLevel(log_level)
 
     logger.info(f"Log name: {logger.name}, Level: {logger.level}, Path: {log_path}")
@@ -128,12 +135,57 @@ def ensure_local_copy(gvfs_path):
             os.remove(local_pdf_path)
 
 
-def fix_json(json_text):
-    last_valid_index = max(json_text.rfind("}"), json_text.rfind("]"))
-    json_fixed = json_text[:last_valid_index+1]
+def fix_json_keys(obj):
+    if isinstance(obj, dict):
+        new_obj = {}
+        for key, value in obj.items():
+            new_key = re.sub(r'\s+', '_', key)       # replace spaces with underscores
+            new_key = new_key[0].lower() + new_key[1:] if new_key else new_key  # lowercase first letter
+            new_obj[new_key] = fix_json_keys(value)
+        return new_obj
+    elif isinstance(obj, list):
+        return [fix_json_keys(item) for item in obj]
+    else:
+        return obj
 
-    return json_fixed
+
+def fix_json(json_text):
+    # Remove Markdown wrapping (if present)
+    if json_text.startswith("```json") or json_text.startswith("```"):
+        json_text = json_text.strip("`").split('\n', 1)[-1].rsplit('\n', 1)[0]
     
+    # Fix internal quotes (escape unescaped quotes inside strings)
+    # This regex ensures any double quotes inside strings are escaped
+    json_text = re.sub(r'\"([^\"]+)\"', r'\"\\\"\1\\\"\"', json_text)
+
+    # Ensure the JSON text has a valid ending
+    last_valid_index = max(json_text.rfind("}"), json_text.rfind("]"))
+    json_fixed = json_text[:last_valid_index + 1]
+
+    # Strip any unnecessary whitespace at the beginning or end
+    json_fixed = json_fixed.strip()
+    
+    return json_fixed
+
+
+def load_json(json_text):
+    try:
+        # Try to directly load the JSON first
+        return json.loads(json_text)
+    except json.JSONDecodeError as e:
+        # If there's a JSONDecodeError, attempt to fix the JSON string
+        _logger.warning(f"JSONDecodeError: {e}. Attempting to fix JSON.")
+        fixed_json_text = fix_json(json_text)
+        try:
+            return json.loads(fixed_json_text)
+        except json.JSONDecodeError as e:
+            _logger.error(f"Failed to parse fixed JSON: {e}")
+            return None  # Returning None if still unable to parse
+    except Exception as e:
+        # Handle unexpected errors
+        _logger.exception(f"Unexpected error: {e}")
+        return None
+        
     
 def get_log_level(level):
     levels = {
@@ -179,7 +231,7 @@ def wait_agent(agent):
 
     while agent.is_active():
         time.sleep(1)
-        
+
         dot_counter += 1
         if dot_counter % 6 == 0:
             print('.', end='', flush=True)
@@ -210,3 +262,12 @@ class ColorFormatter(logging.Formatter):
         color = self.LEVEL_COLORS.get(level_char, Fore.WHITE)
         message = super().format(record)
         return f"{color}{message}{Style.RESET_ALL}"
+
+
+def check_directory_accessible(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Path '{path}' does not exist.")
+    if not os.path.isdir(path):
+        raise NotADirectoryError(f"Path '{path}' is not a directory.")
+    if not os.access(path, os.R_OK):
+        raise PermissionError(f"Path '{path}' is not readable.")

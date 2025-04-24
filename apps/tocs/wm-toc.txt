@@ -1,0 +1,40 @@
+[
+    ('Introduction to Waste Management', 6, 7, []),
+    ('Sustainability and Waste Management', 7, 8, []),
+    ('Types of Waste', 9, 10, []),
+    ('Waste Management Principles and Procedures', 11, 17, [
+        ('GENERATION, COLLECTION, AND STORAGE ', 12, 14, []),
+        ('TRANSPORT, TREATMENT AND DISPOSAL', 14, 16, []),
+        ('MONITORING', 16, 17, []),
+    ]),
+    ('Labeling and Recycling of Products', 17, 21, []),
+    ('Waste Management Plans for Facilities', 22, 31, [
+        ('Design', 22, 27, []),
+        ('ASSESSMENT', 27, 31, [
+            ('Compliance Assessment', 28, 28, []),
+            ('Assessment of Targets', 28, 29, []),
+            ('Viability Assessment', 29, 29, []),
+            ('Credibility Assessment', 29, 31, []),
+        ]),
+    ]),
+    ('Municipal Waste Management', 32, 37, [
+        ('Level 1: Collection and Collection Centers', 32, 33, []),
+        ('Level 2: Distribution Centers', 33, 35, []),
+        ('Level 3: Treatment', 35, 36, []),
+        ('Level 3: Disposal', 36, 37, [])
+    ]),
+    ('Environmental Management Regulation', 38, 40, [
+        ('Government Institutions and Waste Management', 38, 39, [
+            ('Local Governments', 38, 38, []),
+            ('Government Agencies', 38, 39, []),
+            ('National Governments', 39, 39, []),
+        ]),
+        ('International Standerdization', 39, 40, []),
+    ]),
+    ('Waste Management Economics', 41, 44, [
+        ('Circular Economy', 41, 43, []),
+        ('Supply and Demand', 43, 44, []),
+    ]),
+    ('Remarks', 45, 45, []),
+    ('References', 46, 46, [])
+]

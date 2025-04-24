@@ -1,12 +1,13 @@
 # Required when executed as the main program.
 import os, sys
 
-import test
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 ###
 
+from itertools import product
+import json
 import random
 
 import logging
@@ -14,16 +15,32 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
-from services.kg_service import Topic
+from services.kg_service import Topic as KgTopic
+from services.llm_service import LlmService
+
+from evaluation.features import ScqFeatures
+from evaluation.scq_evaluator import ScqEvaluator
 from generation.ranker.node_ranker import NodeRanker
 from generation.ranker.simple_ranker import SimpleRanker
 from generation.ranker.weighted_ranker import WeightedRanker
+from knowsys.knowledge_graph import KnowledgeGraph
 
 
 
 class SingleChoiceGenerator(Agent):
     TOPIC_CREATE = "Create/SCQ/Generation"
-
+    
+    difficulty_mapping = {
+        30: 10,
+        50: 14,
+        70: 18
+    }
+    # difficulty_mapping = {
+    #     30: 12,
+    #     50: 14,
+    #     70: 16
+    # }
+    weights = [1, 1, 1.5, 1, 1, 1, 1.2] # 定義各參數的權重  
 
     def __init__(self, config:dict):
         logger.info(f"config: {config}")
@@ -32,10 +49,10 @@ class SingleChoiceGenerator(Agent):
 
     def on_activate(self):
         logger.verbose(f"on_activate")
-        self.subscribe(SingleChoiceGenerator.TOPIC_CREATE, topic_handler=self._handle_create)
+        self.subscribe(SingleChoiceGenerator.TOPIC_CREATE, topic_handler=self.handle_create)
 
 
-    def _handle_create(self, topic, pcl:TextParcel):
+    def handle_create(self, topic, pcl:TextParcel):
         # question_criteria = {
         #     'question_id': 'Q101',              # 使用者自訂題目 ID
         #     'subject':  'Subject Name',         # 科目名稱
@@ -46,10 +63,30 @@ class SingleChoiceGenerator(Agent):
         question_criteria = pcl.content
         logger.debug(f"question_criteria: {question_criteria}")
         
-        generated_question = self._generate_question(question_criteria)
+        try_count = 0
+        generated_questions = []  # List to store all generated questions with their evaluation results
+        generated = self.generate_question(question_criteria)
+        grade_criteria = SingleChoiceGenerator.difficulty_mapping[question_criteria['difficulty']]
 
-        logger.debug(f"generated_question: {generated_question}")
-        return generated_question
+        while try_count < 3:
+            passed, grade_value = self.evaluate_question(generated, grade_criteria)
+            generated_questions.append((generated, passed, grade_value))  # Store the generated question along with its evaluation
+
+            if passed:  # If the question passes, stop the loop
+                break
+
+            logger.info(f"Retrying question generation...")
+            try_count += 1
+            generated = self.generate_question(question_criteria)
+
+        # If no question passed after 3 tries, choose the one with the minimum difference between grade_value and grade_criteria
+        if not passed:
+            best_generated = min(generated_questions, key=lambda x: abs(x[2] - grade_criteria))[0]
+            generated = best_generated
+
+        logger.debug(f"try_count: {try_count}")
+        logger.info(f"generated_question: {generated}")
+        return generated
     
     
     def test_return(self, question_criteria):
@@ -63,203 +100,309 @@ class SingleChoiceGenerator(Agent):
         return question
 
 
-    def _generate_question(self, question_criteria):
-        question = {
+    def generate_question(self, question_criteria):
+        assessment = {
             'question_criteria': question_criteria,
         }
         qc = question_criteria
 
         # From question criteria to concepts
-        pcl = TextParcel({'kg_name': qc['subject'], 'document': qc['document'], 'section': qc['section']})
-        concepts = self.publish_sync(Topic.CONCEPTS_QUERY.value, pcl).content['concepts']
+        subject, document, section = qc['subject'], qc['document'], qc['section']
+        pcl = TextParcel({'kg_name': subject, 'document': document, 'section': section})
+        concepts = self.publish_sync(KgTopic.CONCEPTS_QUERY.value, pcl).content['concepts']
         logger.debug(f"concepts: {', '.join([n['name'] for n in concepts])}")
         if not concepts:
-            logger.error(msg := f"No concepts found.")
-            question['error'] = msg
-            return question
+            raise ValueError("No concepts found.")
+            # logger.error(msg := f"No concepts found.")
+            # assessment['error'] = msg
+            # return assessment
 
-        # From concepts to core concept and fact nodes
-        ranker = SimpleRanker(self, qc['subject'], qc['document'], qc['section'])
+        # Generate text materials
+        ranker = SimpleRanker(self, subject, document, section)
         # ranker = WeightedRanker(self, qc['subject'], qc['document'], qc['section'])
-        core_concept = ranker.rank_concepts(concepts)
-        facts = ranker.rank_facts(core_concept)
-        logger.debug(f"facts: {', '.join([n['name'] for n in facts])}")
-        if not facts:
-            question['error'] = 'No facts found.'
-            return question
+        count = question_criteria.get('difficulty', 30) // 3
+        text_materials = []
+        for _ in range(count):
+            core_concept = ranker.rank_concepts(concepts)
+            facts = ranker.rank_facts(core_concept)
+            logger.verbose(f"facts: {', '.join([n['name'] for n in facts])}")
+            if not facts:
+                continue
 
-        return self.test_return(question_criteria)
-        # From fact nodes to question
-        # text_materials = self._generate_text_materials(facts)
-        # maked = self._make_question(text_materials, question_criteria['difficulty'])
-        # question.update(maked)
-
-        return question
-
+            text_materials.extend(self._generate_text_materials(subject, facts))
+            if len(text_materials) >= count:
+                break
+            
+        logger.debug(f"text_materials: {text_materials}")
+        if not text_materials:
+            raise ValueError("No text materials found.")
+            # logger.error(msg := f"No text materials found.")
+            # assessment['error'] = msg
+            # return assessment
+        
+        # Make question
+        maked, feature_levels = self._make_question(text_materials, question_criteria['difficulty'])
+        if maked:
+            assessment['question'] = maked
+            assessment['question_criteria']['feature_levels'] = feature_levels
+            assessment['question_criteria']['weighted_grade'] = sum(x * w for x, w in zip(feature_levels.values(), SingleChoiceGenerator.weights))
+            return assessment
+        else:
+            return None
+        # return self.test_return(question_criteria)
 
     
+    def evaluate_question(self, assessment, grade_criteria):
+        logger.verbose(f"assessment: {assessment}")
+        
+        evaluated = self.publish_sync(ScqEvaluator.TOPIC_EVALUATE, TextParcel(assessment))
+        logger.debug(f"evaluated: {evaluated.content}")
+        
+        # grade_criteria = SingleChoiceGenerator.difficulty_mapping[assessment['question_criteria']['difficulty']]
+        grades = evaluated.content['evaluation'].values()
+        grade_evaluated = sum(x * w for x, w in zip(grades, SingleChoiceGenerator.weights))
+        # grade_evaluated = sum(evaluated.content['evaluation'].values())
+        passed = abs(grade_criteria - grade_evaluated) <= 1.5
+        logger.debug(f"passed: {passed}, grade_criteria: {grade_criteria}, grade_evaluated: {grade_evaluated}")
+
+        return passed, grade_evaluated
+
+        # return not assessment.get('error') and assessment.get('question')
+        
+        
     def choice_concept(self, concept_nodes):
         return random.choice(concept_nodes)
     
     
-    def _get_one_weighted_combination(self,S):
+    def _get_weighted_combination(self, score):
         """
-        隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
-        每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
+        Randomly select a set of 7 parameter combinations that meet the conditions, considering the weight of each parameter.
+        Each parameter score is 1, 2, or 3, and the weighted sum must fall within the range of S ± 1.
 
-        權重分配：
-        - stem_cognitive_level：1.5
-        - high_distractor_count：1.2
-        - 其他特徵：1
+        Weight distribution:  
+        - stem_cognitive_level: 1.5  
+        - high_distractor_count: 1.2  
+        - Other features: 1
 
-        :param S: 目標總分
-        :return: 一組符合條件的參數組合，對應七個具體描述
+        :param score: Target total score  
+        :return: A set of parameter combinations that meet the conditions, corresponding to seven specific descriptions
         """
-        # 定義各參數的權重  
-        weights = [1, 1, 1.5, 1, 1, 1, 1.2]
         
+        down_score, up_score = score - 1, score + 1
+        if up_score < (sw:=sum(SingleChoiceGenerator.weights)) or down_score > sw * 3:
+            return [0] * 7
+
+        all_comnination = list(product(range(1, 4), repeat=7))
+        random.shuffle(all_comnination)
+
         # 篩選符合條件的組合
-        valid_combinations = []
-        for combination in product(range(1, 4), repeat=7):
-            weighted_sum = sum(x * w for x, w in zip(combination, weights))
-            if S - 1 <= weighted_sum <= S + 1:
-                valid_combinations.append(combination)
-        
-        # 若無符合條件的組合，返回 None
-        if not valid_combinations:
-            return None
+        valid_combination = None
+        for combination in all_comnination:
+            weighted_sum = sum(x * w for x, w in zip(combination, SingleChoiceGenerator.weights))
+            if down_score <= weighted_sum <= up_score:
+                valid_combination = combination
+                break
 
-        # 隨機選取一組並命名參數
-        selected = random.choice(valid_combinations)
-        result = {
-            "stem_length": selected[0],
-            "stem_technical_term_density": selected[1],
-            "stem_cognitive_level": selected[2],
-            "option_average_length": selected[3],
-            "option_similarity": selected[4],
-            "stem_option_similarity": selected[5],
-            "high_distractor_count": selected[6],
-        }
-        return result
+        return dict(zip(ScqFeatures.keys, valid_combination))
 
-    def _generate_prompt(self, parameters):
+
+    def _generate_features_prompt(self, combination):
         """
-        根據參數分數和特徵表，自動生成出題敘述。
-        
-        :param parameters: 包含 7 個特徵的分數，格式為字典
-        :return: 題目敘述
+        Automatically generates a question description based on parameter scores and feature table.
+        :param parameters: A dictionary containing scores for 7 features
+        :return: Question description
         """
-        # 定義參數範圍對應描述
-        stem_length_desc = {
-            "high": "題幹字數較長（超過 20 字）",
-            "medium": "題幹字數中等（15 至 35 字之間）",
-            "low": "題幹字數較短（10 至 25 字）"
+        keys = ScqFeatures.keys
+        titles = ScqFeatures.titles
+        descs = ScqFeatures.level_descriptions
+
+        prompt = (f'{titles[i]}: {descs[i][combination[keys[i]] - 1]}' for i in range(len(keys)))
+        return prompt
+
+
+    def _chat(self, prompt_text):
+        messages = [
+            {"role": "system", 
+             "content": """You are a helpful exam question generator. 
+The question you created is a multiple-choice question with only one answer.
+Please respond in the same language as the content provided."""},
+            {"role": "user", 
+             "content": f"""{prompt_text}
+Please response only valid JSON output.
+Do NOT wrap it with ``` or markdown."""}
+        ]
+        
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "generate_question",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "stem": {"type": "string"},
+                        "option_A": {"type": "string"},
+                        "option_B": {"type": "string"},
+                        "option_C": {"type": "string"},
+                        "option_D": {"type": "string"},
+                        "answer": {"type": "string"},
+                    },
+
+                    "required": [
+                        "stem",
+                        "option_A",
+                        "option_B",
+                        "option_C",
+                        "option_D",
+                        "answer"
+                    ],
+                    "additionalProperties": False
+                }
+            }
         }
 
-        technical_term_density_desc = {
-            "high": "題幹使用了較多專業術語（3 個以上）",
-            "medium": "題幹有適當的專業術語（2 至 4 個）",
-            "low": "題幹使用較少或無專業術語（0 至 2 個）"
+        params = {
+            'messages': messages,
+            'response_format': response_format,
+        }
+        
+        pcl = TextParcel(params)
+        question = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
+        
+        response = None
+        try:
+            response = app_helper.load_json(json_text:=question.content['response'])
+        except json.JSONDecodeError as e:
+            logger.exception(e)
+            logger.error(f"Original response: {json_text}")
+            response = None
+            
+        return app_helper.fix_json_keys(response) if response else None
+
+
+    def __shuffle_options(self, question):
+        # Extract original options
+        original_options = {
+            "A": question["option_A"],
+            "B": question["option_B"],
+            "C": question["option_C"],
+            "D": question["option_D"]
+        }
+        correct_answer_text = original_options[question["answer"]]
+
+        # Shuffle options
+        shuffled_items = list(original_options.items())
+        random.shuffle(shuffled_items)
+
+        # Build new question structure
+        new_question = {
+            "stem": question["stem"]
         }
 
-        cognitive_level_desc = {
-            "high": "需進行分析、綜合或評估",
-            "medium": "涉及知識點的理解與綜合",
-            "low": "僅需記憶知識點"
-        }
+        for idx, (_, text) in enumerate(shuffled_items):
+            key = chr(ord("A") + idx)
+            new_question[f"option_{key}"] = text
+            if text == correct_answer_text:
+                correct_new_key = key
 
-        option_length_desc = {
-            "high": "選項文字較長（5 字以上）",
-            "medium": "選項文字中等（3 至 8 字之間）",
-            "low": "選項文字較短（1 至 5 字）"
-        }
+        new_question["answer"] = correct_new_key
+        return new_question
 
-        option_similarity_desc = {
-            "high": "選項間有較高相似度（60% 以上）",
-            "medium": "選項間相似度適中（45% 左右）",
-            "low": "選項間相似度較低（30% 以下）"
-        }
 
-        stem_option_similarity_desc = {
-            "high": "題幹與選項內容高度相關（60% 以上）",
-            "medium": "題幹與選項內容相關性適中（45% 左右）",
-            "low": "題幹與選項內容相關性較低（30% 以下）"
-        }
-
-        high_distractor_count_desc = {
-            "high": "包含 3 個以上的高誘答選項",
-            "medium": "包含 2 個高誘答選項",
-            "low": "包含 1 個高誘答選項"
-        }
-
-        # 根據參數生成對應敘述
-        prompt = (
-            f"題幹字數：{stem_length_desc['high' if parameters['stem_length'] == 3 else 'medium' if parameters['stem_length'] == 2 else 'low']}；\n"
-            f"題幹專業詞密度：{technical_term_density_desc['high' if parameters['stem_technical_term_density'] == 3 else 'medium' if parameters['stem_technical_term_density'] == 2 else 'low']}；\n"
-            f"認知程度：{cognitive_level_desc['high' if parameters['stem_cognitive_level'] == 3 else 'medium' if parameters['stem_cognitive_level'] == 2 else 'low']}；\n"
-            f"選項平均字數：{option_length_desc['high' if parameters['option_average_length'] == 3 else 'medium' if parameters['option_average_length'] == 2 else 'low']}；\n"
-            f"選項間相似度：{option_similarity_desc['high' if parameters['option_similarity'] == 3 else 'medium' if parameters['option_similarity'] == 2 else 'low']}；\n"
-            f"題幹與選項相似度：{stem_option_similarity_desc['high' if parameters['stem_option_similarity'] == 3 else 'medium' if parameters['stem_option_similarity'] == 2 else 'low']}；\n"
-            f"高誘答選項數：{high_distractor_count_desc['high' if parameters['high_distractor_count'] == 3 else 'medium' if parameters['high_distractor_count'] == 2 else 'low']}。"
-        )
-        return prompt    
-
-    def _make_question(self, source_sentences, difficulty):
+    def _make_question(self, text_materials, difficulty):
         # Eddie
         # difficulty: 30, 50, 70
-        # 丙：10分 for difficulty 30
+        # 丙：12分 for difficulty 30
         # 乙：14分 for difficulty 50
-        # 甲：18分 for difficulty 70
+        # 甲：16分 for difficulty 70
         # 隨機取得一組符合條件的 7 個參數組合，考慮各參數的權重。
         # 每個參數的分數為 1, 2, 3，且加權總和需落在 S ± 1 的範圍內。
         # 權重分配：- stem_cognitive_level：1.5 - high_distractor_count：1.2 - 其他特徵：1
 
-        difficulty_mapping = {
-            30: 10,
-            50: 14,
-            70: 18
-        }
+        score = SingleChoiceGenerator.difficulty_mapping[difficulty]
+        combination = self._get_weighted_combination(score)
+        logger.verbose(f"combination: {combination}")        
+        feature_descs = self._generate_features_prompt(combination)
+        features_text = '\n'.join(feature_descs)
+        # logger.verbose(f"feature_descs: {features_text}")
         
-        score = difficulty_mapping[difficulty]
-        combination = self._get_one_weighted_combination(score)
-        prompt = self._generate_prompt(combination)
+        materials_text = '\n'.join(text_materials[:50])
         
-        # 生成題目
-        queation = {
-            'type': 'SCQ',
-            'stem': 'The question stem',
-            'options': ['option1', 'option2', 'option3', 'option4'],
-            'answer': 1,
-            # 'question_criteria': question_criteria
-        }
-        return queation
+        prompt_text =  f"""You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
+1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
+2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
+3.Do not provide explanations or analysis of the questions or answers.
+4.Please respond in the same language as the text materilas provided.
+5.All content in the question, including the stem and options, must be derived from the material text.
+6.Output the result in a json format with the following keys:
+    - stem
+    - option_A
+    - option_B
+    - option_C
+    - option_D
+    - answer (only indicate the correct option: A, B, C, or D).
+
+Features:
+{features_text}
+
+Text materilas:
+{materials_text}
+"""
+        logger.verbose(f"prompt_text:\n{prompt_text}")
+        question = self._chat(prompt_text)
+        if isinstance(question, list):
+            question = question[0]
+        logger.info(f"type:{type(question)}, question: {question}")
+        if question:
+            if 'D' != question.get("answer"):
+                question = self.__shuffle_options(question)
+            return question, combination
+        else:
+            return None, None
     
     
-    def _generate_text_materials(self, fact_nodes):
-        return [
-            "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
-            "104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%",
-            "基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用"
-        ]
+    def _generate_text_materials(self, subject, fact_nodes):
+        def generate_text_from_paths(records):
+            """
+            從每個 record 取得路徑 (path)，
+            提取 (start_node)-[rel]->(end_node) 組成文字描述。
+            """
+            text_segments = set()
+            for record in records:
+                path = record["p"] 
+                for rel in path.relationships:
+                    start_node = rel.start_node
+                    end_node = rel.end_node
+                    
+                    s_name = start_node.get("name", "(unknown)") 
+                    e_name = end_node.get("name", "(unknown)") 
+                    rel = rel.type
+                    text_segments.add(f"{s_name} {rel} {e_name}")
+
+            texts = list(text_segments)
+            logger.verbose(f"text_segments: {texts}")
+            return texts
 
 
-    def choice_fact_nodes(self, concept):
-        facts = {
-            "年份": ["104 年"],
-            "百分比": ["15%", "89.3%"],
-            "政府機構": ["環境部"],
-            "城市": [
-                "基隆市", "臺北市", "新北市", "桃園市", "新竹市",
-                "臺中市", "嘉義市", "臺南市", "高雄市"
-            ],
-            "縣": ["苗栗縣", "彰化縣", "嘉義縣", "屏東縣"],
-            "廢棄物": ["焚化底渣", "一般廢棄物", "底渣"],
-            "設施": ["掩埋場", "焚化廠"],
-            "廢棄物管理": ["資源回收再利用"],
-            "建材": ["營建替代級配材料"],
-            "廢棄物處理": ["分選", "再利用", "掩埋", "最終處置"]
-        }
-        return facts.get(concept, [])
+        query = """
+            MATCH p = (start:fact)-[*1..1]-(other:fact)
+            WHERE elementId(start) = $start_element_id
+            RETURN p
+        """
+        pcl = TextParcel({'kg_name': subject})
+        bolt_url = self.publish_sync(KgTopic.ACCESS_POINT.value, pcl).content['bolt_url']
+        text_materials = []
+        with KnowledgeGraph(uri=bolt_url) as kg:
+            with kg.session() as session:
+                for fact in fact_nodes:
+                    results = session.run(query, start_element_id=fact['element_id'])
+                    text_materials.extend(generate_text_from_paths(results))
+
+        return text_materials
+        # return [
+        #     "104 年全國各縣市焚化底渣產量約占焚化量之 15%",
+        #     "104 年度一般廢棄物底渣再利用量占該年度底渣總量之89.3%",
+        #     "基隆市、臺北市、新北市、桃園市、新竹市、苗栗縣、臺中市、彰化縣、嘉義市、嘉義縣、臺南市、高雄市、屏東縣等，已將所轄焚化廠底渣委外再利用"
+        # ]
             
 
 
