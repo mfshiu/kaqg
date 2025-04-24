@@ -176,9 +176,11 @@ class ConceptScorer:
         self.disconnect()
 
 if __name__ == "__main__":
+    # neo4j 連線資訊
     uri="bolt://localhost:7688"
     username="neo4j"
     password=""
+
     with ConceptScorer(uri,username,password) as scorer:
         concepts = ['天氣', '降雨', '日期', '職業']
         # 例如：PageRank 權重 2，TF-IDF 權重 1，Richness 權重 1
