@@ -1,6 +1,8 @@
 # Required when executed as the main program.
 import os, sys
 
+from generation.ranker.wm_ranker import WasteManagementRanker
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
@@ -22,6 +24,7 @@ from evaluation.features import ScqFeatures
 from evaluation.scq_evaluator import ScqEvaluator
 from generation.ranker.node_ranker import NodeRanker
 from generation.ranker.simple_ranker import SimpleRanker
+from generation.ranker.wm_ranker import WasteManagementRanker
 from generation.ranker.weighted_ranker import WeightedRanker
 from knowsys.knowledge_graph import KnowledgeGraph
 
@@ -118,7 +121,8 @@ class SingleChoiceGenerator(Agent):
             # return assessment
 
         # Generate text materials
-        ranker = SimpleRanker(self, subject, document, section)
+        ranker = WasteManagementRanker(self, subject, document, section)
+        # ranker = SimpleRanker(self, subject, document, section)
         # ranker = WeightedRanker(self, qc['subject'], qc['document'], qc['section'])
         count = question_criteria.get('difficulty', 30) // 3
         text_materials = []
