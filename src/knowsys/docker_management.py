@@ -128,9 +128,11 @@ class DockerManager:
                 },
                 environment = {
                     'NEO4J_AUTH': 'none',  # 設定環境變量，禁用 Neo4j 認證
-                    'NEO4JLABS_PLUGINS': '["apoc"]',  # Enable APOC plugin
-                    'dbms.security.procedures.unrestricted': 'apoc.*',  # Grant access to APOC procedures
+                    'NEO4JLABS_PLUGINS': '["apoc", "graph-data-science"]',  # 啟用 APOC 和 GDS 插件
+                    'dbms.security.procedures.unrestricted': 'apoc.*,gds.*',  # 設定 GDS 為 unrestricted
+                    'dbms.security.procedures.allowlist': 'apoc.*,gds.*',  # 允許 GDS 執行
                     'apoc.export.file.enabled': 'true'  # Allow file export for APOC
+                    
                 },
                 volumes={
                     f"{kg_path}": {'bind': '/data', 'mode': 'rw'}

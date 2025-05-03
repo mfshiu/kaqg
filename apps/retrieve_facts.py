@@ -3,7 +3,7 @@ from knowsys.knowledge_graph import KnowledgeGraph
 from knowsys import docker_management
 import random
 
-class KG_console:
+class FactRetriever:
     url = ""
     uri = ""
 
@@ -16,49 +16,36 @@ class KG_console:
         query_result, summary, keys = self.driver.execute_query(query_statement)
             
         return query_result, summary, keys
+                
+    def fact_query(self,start_node_name,depth,sample=0,incoming_weight = 1,outgoing_weight = 1):
+        fact_query=f"""
+        MATCH (start_node {{name: '{start_node_name}'}})-[r*{depth+1}..{depth+1}]-(related_node)
+        WHERE ALL(rel IN r WHERE type(rel) <> 'include_in')
+        WITH DISTINCT related_node
+        RETURN related_node,
+            size([(related_node)-->(x) | x IN []]) AS outgoing_degree,
+            size([(related_node)<--(x) | x IN []]) AS incoming_degree
+        ORDER BY (outgoing_degree*{outgoing_weight} + incoming_degree*{incoming_weight}) DESC"""
+        facts , summary, keys=self.query(fact_query)
+        
+        
+        return facts, summary, keys
     
-    def query_result_parser(query_ressults,keys,target_properties):
+    def retrieve_sorted_facts(self,section_name,search_depth,target_attributes = ["name"],sample=0,incoming_weight = 1,outgoing_weight = 1):
         """
-        單一key時使用
+        舊的retrieve facts方法，僅透過fact節點的連入連出關係進行計算。
         """
-        result=[]
-        for query_ressult in query_ressults:
-            for property in target_properties:
-                result.append(query_ressult[keys[0]].get(property))
-                
-                
+        #知識圖譜裡沒有section tag,暫時將"MATCH (s:section"替換成MATCH (s:structure
+        section_querys = f"""MATCH (s:structure {{name:'{section_name}'}}) RETURN s;"""
+        sorted_nodes = []
 
-#變數調整，由指定section中抽取一個concept，並獲取由連接數目排序的facts
-KG_name = "Wastepro02"
-section_name = "壹、前言"
-search_depth = 2  # 搜尋的層數
-#retrieve fact and sort
-outgoing_weight = 1
-incoming_weight = 1
-
-
-
-manager = docker_management.DockerManager()
-url,uri = manager.open_KG(KG_name)
-KG = KG_console(uri)
-
-
-#知識圖譜裡沒有section tag,暫時將"MATCH (s:section"替換成MATCH (s:structure
-section_querys = f"""
-MATCH (s:structure {{name:'{section_name}'}}) RETURN s;
-"""
-
-sorted_nodes = []
-
-for cypher in section_querys.splitlines():
-    if cypher.strip() != "":
-        query_results, summary, keys = KG.query(cypher.strip())
+        query_results, summary, keys = fact_retriever.query(section_querys.strip())
         for query_result in query_results:
             record = query_result[keys[0]]
             print(record.get('name'))
             # 使用 sector_node 進行後續查詢
             concept_query = f"MATCH (s)<-[:include_in]-(c:concept) WHERE s.name = '{record.get('name')}' RETURN c" #使用f-string來將變數放入query中，並且使用id()來比對節點
-            concept_result , summary, keys= KG.query(concept_query)
+            concept_result , summary, keys= fact_retriever.query(concept_query)
             concept = []
             if concept_result:
                 print("Concept found : ")
@@ -72,33 +59,100 @@ for cypher in section_querys.splitlines():
                 
                 start_node_name = selected_concept.get("name")  # 起始節點的名稱
                 
-                for i in range(search_depth):
-                    fact_query_test3=f"""
-                    MATCH (start_node {{name: '{start_node_name}'}})-[r*{i+1}..{i+1}]-(related_node)
-                    WHERE ALL(rel IN r WHERE type(rel) <> 'include_in')
-                    WITH DISTINCT related_node
-                    RETURN related_node,
-                        size([(related_node)-->(x) | x IN []]) AS outgoing_degree,
-                        size([(related_node)<--(x) | x IN []]) AS incoming_degree
-                    ORDER BY (outgoing_degree*{outgoing_weight} + incoming_degree*{incoming_weight}) DESC"""
+                #sample實作中，問題是sample後深度搜尋方式
+                if sample:
+                    facts , summary, keys= fact_retriever.fact_query(start_node_name,0,incoming_weight,outgoing_weight)#搜尋最相鄰一層
+                    facts = random.sample(facts, sample)
+                else:
+                    for depth in range(search_depth):
+                        facts , summary, keys= fact_retriever.fact_query(start_node_name,depth,incoming_weight,outgoing_weight)#依重要度與深度排序
                     
                     
-                    facts , summary, keys= KG.query(fact_query_test3)
-                    
+                for fact in facts:
+                    info=[]
+                    for attr in target_attributes:
+                        info.append(fact[keys[0]].get(attr))
 
+                    sorted_nodes.append(info)
 
-                    for fact in facts:
-                        node_name = fact[keys[0]].get("name")
-                        out_count = fact[keys[1]]
-                        in_count = fact[keys[2]]
-                        
-                        sorted_nodes.append((node_name,in_count,out_count))
-
-                # print("Sorted nodes by relationship count:")
-                # for node,in_count,out_count in sorted_nodes:
-                #     print(f"{node} in count: {in_count} out count:{out_count}")
-                    
-                
             else:
                 print(f"找不到與{section_name}相關的Concept")
-print("facts found：\n",sorted_nodes)
+        return sorted_nodes
+    
+    def pagerank_query(self, target_node_elementId, depth,target_attributes = ["name"], max_iterations=20, damping_factor=0.85):
+        """
+        取得與指定目標節點相連的節點，並依 PageRank 分數排序回傳
+        :param target_node_name: 目標節點名稱
+        :param max_iterations: PageRank 演算法最大迭代次數
+        :param damping_factor: PageRank 阻尼係數
+        :return: 依 PageRank 排序的相鄰節點列表 (名稱, PageRank 分數)
+        """
+        
+        check_graph_query = """
+        CALL gds.graph.exists('myGraph') YIELD exists
+        RETURN exists;
+        """
+        results, _, _ = self.query(check_graph_query)
+        graph_exists = results[0]["exists"] if results else False
+        
+        if not graph_exists:
+            # 1. **先建立 GDS 圖**
+            create_graph_query = """
+            CALL gds.graph.project(
+                'myGraph',
+                '*',  // 所有節點
+                {
+                    all: {
+                        type: '*',
+                        orientation: 'NATURAL'
+                    }
+                }
+            );
+            """
+            self.query(create_graph_query)
+
+        pagerank_query = f"""
+        CALL gds.pageRank.stream('myGraph', {{ maxIterations: {max_iterations}, dampingFactor: {damping_factor}}})
+        YIELD nodeId, score
+        WITH gds.util.asNode(nodeId) AS n, score
+        MATCH (n)-[r*1..{depth}]-(target:concept) 
+        WHERE elementId(target) = '{target_node_elementId}'
+        WITH n, score, r
+        WHERE ALL(rel IN r WHERE type(rel) <> 'include_in')
+        RETURN n AS related_nodes, score
+        ORDER BY score DESC;
+        """
+        results, summary, keys = self.query(pagerank_query)
+        
+        # 3. **轉換結果**
+        sorted_nodes = []
+        last_id  = None
+        for record in results:
+            if record['related_nodes'].element_id==last_id:
+                continue
+            last_id = record['related_nodes'].element_id
+            info=[]
+            for attr in target_attributes:
+                info.append(record[keys[0]].get(attr))
+            info.append(record["score"])
+            sorted_nodes.append(info)
+
+        return sorted_nodes
+
+       
+
+KG_name = "Wastepro02"
+manager = docker_management.DockerManager()
+manager.create_container(KG_name)
+url,uri = manager.open_KG(KG_name)
+
+fact_retriever = FactRetriever(uri)
+
+
+target_node_element_id = "4:5cf13260-6b9a-4d94-bf90-9424b4ac6b3d:876" # 目標concept(環境正義)的ElementID
+target_attributes = ["name","file_id","page_number"]
+search_depth = 2  # 搜尋的層數
+
+page_rank_node = fact_retriever.pagerank_query(target_node_element_id,search_depth,target_attributes)
+print(page_rank_node)
+
