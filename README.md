@@ -34,13 +34,16 @@ The system comprises:
 
 ```bash
 kaqg/
-├── retriever/          # KG construction & document parsing
-├── generator/          # Question generation & assessment
-├── agents/             # MAS components using DDS
-├── configs/            # YAML configuration files
-├── data/               # Sample data & KG exports
-├── notebooks/          # Demos and experimental scripts
-├── tests/              # Unit tests
+├── apps/             # Utility tools
+├── doc/             # Documents
+├── know-edit/          # KG editor
+├── src/             # Source codes
+    ├── evluation/          # Question assessment
+    ├── generation/          # Question generation
+    ├── knowsys/             # KG library
+    ├── retrieval/            # Material retrieval
+    └── services/          # Services agents
+├── unit_test/              # Unit tests
 └── README.md
 ```
 
@@ -89,21 +92,6 @@ Validated against ACT reading passages with over 90 system-generated questions a
 ## 🔗 Related Projects
 
 - 🤖 [AgentFlow](https://github.com/mfshiu/AgentFlow): Multi-agent architecture for distributed coordination and task delegation in KAQG.
-
----
-
-## 📄 Citation
-
-If you use KAQG in academic work, please cite:
-
-```
-@article{kaqg2025,
-  title={KAQG: A Knowledge-Graph-Enhanced RAG for Difficulty-Controlled Question Generation},
-  author={Chen, Ching Han and Shiu, Ming Fang},
-  journal={IEEE Transactions on Learning Technologies},
-  year={2025}
-}
-```
 
 ---
 
