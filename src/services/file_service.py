@@ -25,7 +25,7 @@ class FileService(Agent):
     
     
     def __init__(self, agent_config, home_directory):
-        logger.info(f"FileService.__init__")
+        logger.info(f"agent_config: {agent_config}, home_directory: {home_directory}")
         super().__init__('file_service.services.wastepro', agent_config)
         self.home_directory = home_directory
 

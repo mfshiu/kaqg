@@ -202,7 +202,7 @@ def get_log_level(level):
 
 def get_config_path():
     # Get path from environment variable or default to current directory
-    return os.getenv('WASTEPRO_CONFIG_PATH', os.path.join(os.getcwd(), 'wastepro.toml'))
+    return os.getenv('WASTEPRO_CONFIG_PATH', os.path.join(os.getcwd(), 'kaqg.toml'))
 
 
 def get_agent_config():
@@ -217,7 +217,26 @@ def get_agent_config():
         }
     }
 
+    # Update agent_config for compatibility with new version of agentflow
+    agent_config['broker']['broker_name'] = broker_name
+    agent_config['broker'][broker_name] = agent_config['broker'].copy()
+
     return agent_config
+
+
+# def get_agent_config():
+#     global config
+    
+#     broker_name = config['broker']['broker_name']
+
+#     agent_config = {
+#         'version': config['system']['version'],
+#         'broker': {
+#             **config['broker'].get(broker_name, {})
+#         }
+#     }
+
+#     return agent_config
 
 
 def wait_agent(agent):

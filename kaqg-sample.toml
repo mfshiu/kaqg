@@ -17,14 +17,6 @@ username = ""
 password = ""
 keepalive = 60
 
-[broker.amqp]
-broker_type = "amqp"
-host = "amqp_host"
-port = 5672
-username = "amqp_user"
-password = "amqp_pass"
-heartbeat = 30
-
 [service]
 
 [service.file]
@@ -34,5 +26,6 @@ home_directory = "_upload"
 openai_api_key = ""
 
 [service.kg]
+# The docker host and data path for docker container
 hostname = "localhost"
 datapath = "path/to/docker/volume"
