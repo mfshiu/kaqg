@@ -22,6 +22,7 @@ from knowsys.docker_management import DockerManager
 
 
 class TestAgent(unittest.TestCase):
+    test_files = ['Pdf01-台文.pdf', 'Pdf01-English.pdf', 'Pdf01-日本語.pdf']
     file_ids = []
     filenames = []
     
@@ -40,9 +41,8 @@ class TestAgent(unittest.TestCase):
             self.subscribe(PdfRetriever.TOPIC_RETRIEVED)
             
             self.publish_sync(KGTopic.CREATE, TextParcel({'kg_name': self.kg_name}), timeout=20)
-            # self.docker_management.create_container(self.kg_name)
             
-            for filename in ['Pdf01-台文.pdf', 'Pdf01-English.pdf', 'Pdf01-日本語.pdf']:
+            for filename in TestAgent.test_files:
                 with open(os.path.join(os.getcwd(), 'unit_test', 'data', filename), 'rb') as file:
                     content = file.read()
                 pcl = BinaryParcel({
@@ -64,29 +64,16 @@ class TestAgent(unittest.TestCase):
 
 
     def setUp(self):
-        # Comment here if related agents is started.
-        # storage_root = os.path.join(os.getcwd(), '_upload')
-        # if not os.path.exists(storage_root):
-        #     os.mkdir(storage_root)
-        # self.file_agent = FileService(config_test, storage_root)
-        # self.file_agent.start()
-        
-        # self.kgservice = KnowledgeGraphService(config_test)
-        # self.kgservice.start()
-        
-        # self.knowledge_retriever = PdfRetriever(config_test)
-        # self.knowledge_retriever.start()
-
         self.validation_agent = TestAgent.ValidationAgent()
         self.validation_agent.start_thread()
 
 
     def _do_test_1(self):
         logger.debug(f'file_ids: {TestAgent.file_ids}')
-        self.assertEqual(len(TestAgent.file_ids), 3)
-        self.assertTrue('Pdf01-台文.pdf' in TestAgent.filenames)
-        self.assertTrue('Pdf01-English.pdf' in TestAgent.filenames)
-        self.assertTrue('Pdf01-日本語.pdf' in TestAgent.filenames)
+        
+        self.assertEqual(len(TestAgent.file_ids), len(TestAgent.test_files))
+        for testfile in TestAgent.test_files:
+            self.assertTrue(testfile in TestAgent.filenames)
 
 
     def test_1(self):
@@ -94,16 +81,11 @@ class TestAgent(unittest.TestCase):
         
         for _ in range(100):
             time.sleep(1)
-            if len(TestAgent.file_ids) == 3:
+            if len(TestAgent.file_ids) == len(TestAgent.test_files):
                 break
             print('.', end='')
 
         self._do_test_1()
-        # try:
-        #     self._do_test_1()
-        # except Exception as ex:
-        #     logger.exception(ex)
-        #     self.assertTrue(False)
 
 
     def tearDown(self):

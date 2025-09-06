@@ -7,7 +7,7 @@ logger:Logger = __import__('src').get_logger()
 
 
 class TextService(Agent):
-    NAME = 'text_service.services.wastepro'
+    NAME = 'text_service.services.kaqg'
     TOPIC_TEXT_EXTRACT = "TextExtract/TextService/Services"
     
     

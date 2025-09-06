@@ -1,0 +1,4 @@
+numpy
+pdfplumber
+Pillow
+PyMuPDF

@@ -12,7 +12,6 @@ import unittest
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import BinaryParcel, Parcel
-from services.file_service import FileService
 
 config_test = app_helper.get_agent_config()
 logger.info(f"config_test: {config_test}")
@@ -29,6 +28,7 @@ class TestAgent(unittest.TestCase):
 
 
         def on_connected(self):
+            logger.debug(self.M(f"on_connected: {self.name}"))
             self.subscribe('file_uploaded')
             
             time.sleep(1)

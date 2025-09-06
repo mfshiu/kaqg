@@ -12,7 +12,8 @@ import unittest
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel, Parcel
-from services.kg_service import KnowledgeGraphService, Action, Topic
+#from services.kg_service import KnowledgeGraphService, Action, Topic
+from services.kg_service import Topic
 
 config_test = app_helper.get_agent_config()
 logger.info(f"config_test: {config_test}")

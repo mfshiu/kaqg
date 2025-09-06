@@ -102,6 +102,12 @@ class PdfRetriever(Agent):
                     logger.exception(e)
                     if attempt == max_attempts:
                         logger.error(f"Skipping page {page_number} after {max_attempts} failed attempts.")
+                        
+        self.publish(PdfRetriever.TOPIC_RETRIEVED, {
+            'file_id': file_info['file_id'],
+            'filename': file_info['filename'],
+            'kg_name': kg_name,
+        })
         
 
     chapter = tuple[str, int, int, list['chapter']]
@@ -435,7 +441,12 @@ Example output:
         factes = self._extract_facts(page_content)
         concept_facts = self._extract_concepts(factes, page_content)
         identified_facts = {fact for facts in concept_facts.values() for fact in facts}
+        
+        logger.debug(f"identified_facts: {identified_facts}")
         fact_pairs, new_concept_facts = self._extract_facts_relationship(identified_facts, page_content)
+        logger.debug(f"fact_pairs: {fact_pairs}")
+        logger.debug(f"new_concept_facts: {new_concept_facts}")
+        
         concept_facts.update(new_concept_facts)
         
         triplets = self._pair_sections(sections, meta)
@@ -443,42 +454,6 @@ Example output:
         triplets.extend(self._pair_facts_to_concept(concept_facts))
         triplets.extend(self._pair_facts_to_fact(fact_pairs, concept_facts, page_content))
         
-        return triplets
-    
-    
-    def extract_triplets_20250411(self, page_content, sections, meta) -> list[tuple[dict, dict, dict]]:
-        extractor = FactConceptExtractor(PdfRetriever.LlmChat(self))
-        
-        # extract facts and concepts in LLM
-        logger.info("Start to extract facts and concepts in LLM..")
-        factes, concepts, entity_hierarchy = extractor.get_concept_n_fact(page_content)
-        logger.debug(f"\nfactes: {factes[:5]}..\nconcepts: {concepts[:5]}..\nentity_hierarchy: {entity_hierarchy}")
-        logger.verbose(f"\nfactes: {factes}\nconcepts: {concepts}\nentity_hierarchy: {entity_hierarchy}")
-        merged_concepts = list(set(concepts + list(entity_hierarchy.keys())))
-        merged_concepts.append('others')
-        
-        # extract fact-relationship-fact in LLM
-        logger.info("Start to extract fact-relationship-fact in LLM..")
-        facts_pairs = extractor.get_facts_pairs(factes, page_content)
-        logger.debug(f"facts_pairs: {facts_pairs[:5]}..")
-        logger.verbose(f"facts_pairs: {facts_pairs}")
-        
-        # get aliases and save as dict in LLM
-        aliases_keys = factes + concepts
-        logger.info("Start to get aliases in LLM..")
-        aliases_table = extractor.get_aliases(aliases_keys)
-        logger.debug(f"aliases_table: {aliases_table}")
-
-        # start to generate triplets
-        logger.debug("Start to generate triplets..")
-        pairer = SectionPairer()
-        pairer.pair_concepts_with_facts(sections, entity_hierarchy, aliases_table, factes)
-        pairer.pair_sections_with_concepts(sections, merged_concepts, aliases_table)
-        pairer.pair_lower_to_higher_sections(sections, meta)
-        pairer.pair_facts_and_facts(facts_pairs)
-
-        triplets = pairer.get_results()
-        # logger.verbose(f"triplets: {triplets}")
         return triplets
 
 

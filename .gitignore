@@ -171,6 +171,7 @@ _upload/
 ckip_data/
 doc/
 exe_test/
+path/
 src/knowsys/data/
 
 kaqg.toml

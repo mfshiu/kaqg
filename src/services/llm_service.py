@@ -28,7 +28,7 @@ class LlmModel(Enum):
 
 
 class LlmService(Agent):
-    SERVICE_NAME = 'llm_service.services.wastepro'
+    SERVICE_NAME = 'llm_service.services.kaqg'
     TOPIC_LLM_PROMPT = "Prompt/LlmService/Services"
 
     _default_llm_params = {
@@ -70,7 +70,7 @@ class LlmService(Agent):
         params = pcl.content
         logger.verbose(f"params: {params}")
 
-        response = self.llm.generate_response(params)
+        response = self.llm.generate_response(params['messages'])
         logger.debug(self.M(response))
 
         return {
@@ -102,15 +102,15 @@ if __name__ == '__main__':
             logger.info(f"pcl:\n{pcl}")
 
             self.terminate()
-            llm_agent.terminate()
+            # llm_agent.terminate()
 
-
-    config = app_helper.get_agent_config()
-    config['llm'] = app_helper.config['service']['llm']
-    llm_agent = LlmService(config)
-    llm_agent.start_process()
 
     if "-test" in sys.argv:
         ValidationAgent().start_thread()
+    else:
+        config = app_helper.get_agent_config()
+        config['llm'] = app_helper.config['service']['llm']
+        llm_agent = LlmService(config)
+        llm_agent.start_process()
+        app_helper.wait_agent(llm_agent)
 
-    app_helper.wait_agent(llm_agent)

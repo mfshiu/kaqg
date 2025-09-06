@@ -95,61 +95,78 @@ class DockerManager:
     
     def create_container(self, kgName):
         """
-        建立一個新的 Neo4j Docker 容器，並將對應資料掛載到指定資料夾。
-
-        功能說明：
-        - 自動取得可用的 HTTP 與 Bolt 連接埠
-        - 建立對應的本機 Volume 資料夾（綁定到 `/data`）
-        - 啟動包含 APOC Plugin 的 Neo4j 容器，並停用認證（NEO4J_AUTH=none）
-        - 等待容器啟動成功（可連線）後，回傳 HTTP 與 Bolt 的存取 URL
-
-        :param kgName: 知識圖譜名稱，同時作為 Docker container 名稱與資料資料夾名稱
-        :return: (http_url, bolt_url) — 成功則為 HTTP 與 Bolt 協議的 URL，失敗則為 (None, None)
+        若 kgName 的容器已存在則不建立；若未啟動先啟動，
+        最後回傳 (http_url, bolt_url)。若無法取得連接埠則回傳 (None, None)。
         """
-        print(f"Creating new container for {kgName}...")
-        http_port = self.get_free_port(7474)
-        bolt_port = self.get_free_port(7687)
-
-        # Ensure the path is absolute and normalized
-        kg_path = os.path.join(self.base_volume_dir, kgName)
-        # kg_path = os.path.join(self.datapath, 'neo4j_KGs', kgName)
-        kg_path = os.path.normpath(kg_path)  # Normalize the path to use correct separators
-        kg_path = os.path.abspath(kg_path)  # Convert to absolute path
-        # Docker on Windows might need paths to use forward slashes
-        kg_path = kg_path.replace('\\', '/')  # Replace backslashes with forward slashes if needed
-
+        # 先嘗試取得既有容器
         try:
-            container = self.client.containers.run(
-                image=self.image,
-                name=kgName,
-                ports = {
-                    '7474/tcp': http_port,  # 對應的port映射
-                    '7687/tcp': bolt_port
-                },
-                environment = {
-                    'NEO4J_AUTH': 'none',  # 設定環境變量，禁用 Neo4j 認證
-                    'NEO4JLABS_PLUGINS': '["apoc", "graph-data-science"]',  # 啟用 APOC 和 GDS 插件
-                    'dbms.security.procedures.unrestricted': 'apoc.*,gds.*',  # 設定 GDS 為 unrestricted
-                    'dbms.security.procedures.allowlist': 'apoc.*,gds.*',  # 允許 GDS 執行
-                    'apoc.export.file.enabled': 'true'  # Allow file export for APOC
-                    
-                },
-                volumes={
-                    f"{kg_path}": {'bind': '/data', 'mode': 'rw'}
-                },
-                detach=self.detach
-            )
+            container = self.client.containers.get(kgName)
 
-            self.wait_for_KG(http_port, timeout=180)
-            print(f"Container {container.name} created and running.HTTP at: http://{self.hostname}:{http_port}, BOLT at: bolt://{self.hostname}:{bolt_port}")
-            
-            http_url = f"http://{self.hostname}:{http_port}"
-            bolt_url = f"bolt://{self.hostname}:{bolt_port}"
-            return http_url, bolt_url
+            # 若未啟動則啟動
+            if container.status != 'running':
+                container.start()
+                # 重新抓一次屬性以取得最新連接埠映射
+                container.reload()
 
-        except docker.errors.APIError as e:
-            print(f"Error creating container: {e}")
-            return None, None
+            # 讀取既有的連接埠映射
+            ports = container.attrs['NetworkSettings']['Ports'] or {}
+            http_port = ports.get('7474/tcp', [{}])[0].get('HostPort')
+            bolt_port = ports.get('7687/tcp', [{}])[0].get('HostPort')
+
+            # 若映射缺失，嘗試用既有工具找
+            if not http_port or not bolt_port:
+                http_port, bolt_port = self.get_ports(kgName)
+
+            if http_port and bolt_port:
+                # 確認服務已就緒
+                self.wait_for_KG(int(http_port), timeout=180)
+                return (f"http://{self.hostname}:{http_port}",
+                        f"bolt://{self.hostname}:{bolt_port}")
+            else:
+                print(f"Existing container '{kgName}' has no port bindings.")
+                return None, None
+
+        except docker.errors.NotFound:
+            # 不存在則建立新容器
+            print(f"Creating new container for {kgName}...")
+
+            http_port = self.get_free_port(7474)
+            bolt_port = self.get_free_port(7687)
+
+            # 準備資料夾
+            kg_path = os.path.join(self.base_volume_dir, kgName)
+            kg_path = os.path.abspath(os.path.normpath(kg_path)).replace('\\', '/')
+            os.makedirs(kg_path, exist_ok=True)
+
+            try:
+                container = self.client.containers.run(
+                    image=self.image,
+                    name=kgName,
+                    ports={
+                        '7474/tcp': http_port,
+                        '7687/tcp': bolt_port
+                    },
+                    environment={
+                        'NEO4J_AUTH': 'none',
+                        'NEO4JLABS_PLUGINS': '["apoc", "graph-data-science"]',
+                        'dbms.security.procedures.unrestricted': 'apoc.*,gds.*',
+                        'dbms.security.procedures.allowlist': 'apoc.*,gds.*',
+                        'apoc.export.file.enabled': 'true'
+                    },
+                    volumes={kg_path: {'bind': '/data', 'mode': 'rw'}},
+                    detach=self.detach
+                )
+
+                self.wait_for_KG(http_port, timeout=180)
+                print(f"Container {container.name} created and running. "
+                    f"HTTP at: http://{self.hostname}:{http_port}, "
+                    f"BOLT at: bolt://{self.hostname}:{bolt_port}")
+                return (f"http://{self.hostname}:{http_port}",
+                        f"bolt://{self.hostname}:{bolt_port}")
+
+            except docker.errors.APIError as e:
+                print(f"Error creating container: {e}")
+                return None, None
 
 
     def open_KG(self, kgName):

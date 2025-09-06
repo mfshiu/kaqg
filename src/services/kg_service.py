@@ -26,7 +26,6 @@ class Topic(StrEnum):
         formatted_name = ''.join(word.capitalize() for word in words)
         return f"{formatted_name}/KGService/Services"
     
-    
     CREATE = auto()
     ACCESS_POINT = auto()
     TRIPLETS_ADD = auto()
@@ -36,13 +35,12 @@ class Topic(StrEnum):
     
     
     
-    
 class KnowledgeGraphService(Agent):
 
     def __init__(self, cfg):
         app_helper.check_directory_accessible(cfg['kg']['datapath'])
 
-        super().__init__('kg_service.services.wastepro', cfg)
+        super().__init__('kg_service.services.kaqg', cfg)
         self.hostname = cfg['kg']['hostname']
         self.datapath = cfg['kg']['datapath']
         logger.info(f"Creating Docker container on host '{self.hostname}'\nwith data storage at '{self.datapath}'")    
@@ -71,7 +69,9 @@ class KnowledgeGraphService(Agent):
     
     def create_knowledge_graph(self, topic:str, pcl:TextParcel):
         kg_name = pcl.content['kg_name']
+        logger.debug(f"Creating KG: {kg_name} ...")
         http_url, bolt_url = self.docker_manager.create_container(kg_name)
+        logger.debug(f"KG '{kg_name}' created: {http_url}, {bolt_url}")
 
         topic_triplets_add = f'{kg_name}/{Topic.TRIPLETS_ADD.value}'
         self.subscribe(topic_triplets_add, topic_handler=self.handle_triplets_add)
