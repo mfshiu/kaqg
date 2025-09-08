@@ -6,6 +6,6 @@ Pillow
 PyMuPDF
 networkx
 toml
-yaml
+PyYAML
 
 mas-agentflow
