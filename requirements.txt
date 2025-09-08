@@ -1,5 +1,11 @@
+colorama
 numpy
+openai
 pdfplumber
 Pillow
 PyMuPDF
 networkx
+toml
+yaml
+
+mas-agentflow
