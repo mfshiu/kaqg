@@ -1,6 +1,7 @@
 colorama
 numpy
 openai
+paho-mqtt
 pdfplumber
 Pillow
 PyMuPDF

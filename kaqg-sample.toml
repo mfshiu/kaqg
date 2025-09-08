@@ -1,31 +1,38 @@
 [system]
 version = 1
 
+# Logging configuration
 [logging]
-name = "wastepro"
-path = "_log/wastepro.log"
-level = "VERBOSE"  # VERBOSE, DEBUG, INFO, WARNING, ERROR
+name = "kaqg"                       # Logger name
+path = "_log/kaqg.log"              # Log file path
+level = "VERBOSE"                   # VERBOSE, DEBUG, INFO, WARNING, ERROR
 
+# Broker configuration
 [broker]
 broker_name = "mqtt01"
 
-[broker.mqtt01]
-broker_type = "mqtt"
-host = "localhost"
-port = 1883
-username = ""
-password = ""
-keepalive = 60
+# Broker details
+[broker.mqtt01]                     # mqtt broker configuration
+broker_type = "mqtt"                # Type of broker (e.g., mqtt)
+host = "localhost"                  # MQTT broker host
+port = 1883                         # MQTT broker port
+username = ""                       # MQTT username   
+password = ""                       # MQTT password
+keepalive = 60                      # Keepalive interval in seconds
 
+# Service configuration
 [service]
 
+# File service configuration
 [service.file]
-home_directory = "_upload"
+home_directory = "_upload"          # Directory to store uploaded files
 
+# LLM service configuration
 [service.llm]
-openai_api_key = ""
+openai_api_key = ""                 # Your OpenAI API key
 
+# Knowledge graph service configuration
 [service.kg]
 # The docker host and data path for docker container
-hostname = "localhost"
-datapath = "path/to/docker/volume"
+hostname = "localhost"              # Docker host
+datapath = "path/to/docker/volume"  # Path to Docker volume for KG data
