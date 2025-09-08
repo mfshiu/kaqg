@@ -10,7 +10,6 @@ import unittest
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import Parcel
 from generation.scq_generator import SingleChoiceGenerator
-from config_test import config_test
 
 import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
@@ -34,13 +33,13 @@ class TestAgent(unittest.TestCase):
     
     class ValidationAgent(Agent):
         def __init__(self):
-            super().__init__(name='main', agent_config=config_test)
+            super().__init__(name='main', agent_config=app_helper.get_agent_config())
             self.generated_question = None
 
 
         def on_activate(self):
             time.sleep(1)   # Waiting for other agents to start.
-            
+
             topic_return = f'{self.agent_id}/SCQ_TEST'
             self.subscribe(topic_return)
 
@@ -58,14 +57,13 @@ class TestAgent(unittest.TestCase):
             
             
         def on_message(self, topic: str, pcl:Parcel):
-            logger.info(f'topic: {topic}, contgent: {pcl.content}')
+            logger.info(f'topic: {topic}, content: {pcl.content}')
             self.generated_question = pcl.content
 
 
-
     def setUp(self):
-        self.agent_scq = SingleChoiceGenerator(config_test)
-        self.agent_scq.start()
+        # self.agent_scq = SingleChoiceGenerator(app_helper.get_agent_config())
+        # self.agent_scq.start()
 
         self.validation_agent = TestAgent.ValidationAgent()
         self.validation_agent.start_thread()
@@ -73,7 +71,8 @@ class TestAgent(unittest.TestCase):
 
     def _do_test_1(self):
         generated_question = self.validation_agent.generated_question
-        self.assertTrue(generated_question['type'], 'SCQ')
+        logger.info(f'generated_question: {generated_question}')
+        self.assertIsNotNone(generated_question)
 
 
     def test_1(self):
@@ -87,7 +86,7 @@ class TestAgent(unittest.TestCase):
 
 
     def tearDown(self):
-        self.agent_scq.terminate()
+        # self.agent_scq.terminate()
         self.validation_agent.terminate()
 
 

@@ -25,7 +25,6 @@ from evaluation.scq_evaluator import ScqEvaluator
 from generation.ranker.node_ranker import NodeRanker
 from generation.ranker.simple_ranker import SimpleRanker
 from generation.ranker.wm_ranker import WasteManagementRanker
-from generation.ranker.weighted_ranker import WeightedRanker
 from knowsys.knowledge_graph import KnowledgeGraph
 
 
@@ -271,7 +270,7 @@ Do NOT wrap it with ``` or markdown."""}
         
         pcl = TextParcel(params)
         question = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
-        
+
         response = None
         try:
             response = app_helper.load_json(json_text:=question.content['response'])
@@ -279,7 +278,7 @@ Do NOT wrap it with ``` or markdown."""}
             logger.exception(e)
             logger.error(f"Original response: {json_text}")
             response = None
-            
+
         return app_helper.fix_json_keys(response) if response else None
 
 

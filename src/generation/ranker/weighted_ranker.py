@@ -175,6 +175,8 @@ class ConceptScorer:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.disconnect()
+    
+    
 
 if __name__ == "__main__":
     uri="bolt://localhost:7688"
