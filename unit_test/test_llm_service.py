@@ -13,7 +13,7 @@ import unittest
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel, Parcel
 #from services.kg_service import KnowledgeGraphService, Action, Topic
-from services.kg_service import Topic
+from services.llm_service import Topic
 
 config_test = app_helper.get_agent_config()
 logger.info(f"config_test: {config_test}")
@@ -21,8 +21,7 @@ logger.info(f"config_test: {config_test}")
 
 
 class TestAgent(unittest.TestCase):
-    kg_name = None
-    http_url = None
+    llm_result:dict = {}
     
     class ValidationAgent(Agent):
         def __init__(self):
@@ -35,16 +34,20 @@ class TestAgent(unittest.TestCase):
             return_topic = self.agent_id
             self.subscribe(return_topic)
             
-            pcl = TextParcel({'kg_name': 'kg01'}, return_topic)
-            self.publish(Topic.CREATE, pcl)
+            messages = [
+                {"role": "user", "content": 'How are you?'},
+                # {"role": "user", "content": f"{message}\nPlease provide your response in JSON format."}
+            ]            
+            params = {
+                'messages': messages,
+            }            
+            pcl = TextParcel(params, return_topic)
+            self.publish(Topic.LLM_PROMPT, pcl)
 
 
         def on_message(self, topic:str, pcl:Parcel):
-            kg_info:dict = pcl.content
-            logger.debug(self.M(f"topic: {topic}, kg_info: {kg_info}"))
-
-            TestAgent.kg_name = kg_info.get('kg_name')
-            TestAgent.http_url = kg_info.get('http_url')
+            TestAgent.llm_result = pcl.content
+            logger.debug(self.M(f"topic: {topic}, llm_result: {TestAgent.llm_result}"))
 
 
     def setUp(self):
@@ -53,13 +56,11 @@ class TestAgent(unittest.TestCase):
 
 
     def _do_test_1(self):
-        logger.debug(f'kg_name: {TestAgent.kg_name}')
-        self.assertEqual('kg01', TestAgent.kg_name)
-        self.assertTrue(TestAgent.http_url)
+        self.assertTrue(TestAgent.llm_result['response'])
 
 
     def test_1(self):
-        time.sleep(30)
+        time.sleep(10)  # wait for async response
 
         try:
             self._do_test_1()

@@ -6,7 +6,7 @@ import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 ###
 
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 import time
 
 import logging
@@ -15,6 +15,12 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
 from services.llms.chat_llm import BaseLLM, ChatLLM
+
+
+
+class Topic(StrEnum):
+    LLM_PROMPT = 'Prompt/LlmService/Services'
+
 
 
 class LlmModel(Enum):
@@ -29,7 +35,7 @@ class LlmModel(Enum):
 
 class LlmService(Agent):
     SERVICE_NAME = 'llm_service.services.kaqg'
-    TOPIC_LLM_PROMPT = "Prompt/LlmService/Services"
+    TOPIC_LLM_PROMPT = Topic.LLM_PROMPT.value
 
     _default_llm_params = {
         'llm': LlmModel.ChatGPT,

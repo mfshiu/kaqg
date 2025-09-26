@@ -76,7 +76,7 @@ class TestAgent(unittest.TestCase):
 
 
     def test_1(self):
-        time.sleep(20)
+        time.sleep(30)
 
         try:
             self._do_test_1()

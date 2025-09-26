@@ -60,7 +60,8 @@ class TestAgent(unittest.TestCase):
             
             
         def on_terminated(self):
-            self.docker_management.stop_KG(self.kg_name)
+            pass
+            # self.docker_management.stop_KG(self.kg_name)
 
 
     def setUp(self):
