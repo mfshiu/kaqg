@@ -1,7 +1,7 @@
 # KAQG: Knowledge‑Graph‑Enhanced RAG for Difficulty‑Controlled Question Generation
 
 ![License](https://img.shields.io/github/license/mfshiu/kaqg)
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue)
 ![LLM](https://img.shields.io/badge/LLM-Compatible-green)
 ![Graph](https://img.shields.io/badge/Neo4j-5.x-orange)
 
