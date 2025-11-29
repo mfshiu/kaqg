@@ -76,89 +76,101 @@ class ScqEvaluator(Agent):
 
     def _evaluate_1(self, assessment):
         def grade_stem_length(stem: str) -> int:
-            stem_clean = stem.strip()
+            stem = (stem or "").strip()
 
-            # 判斷是否為大多為中文（中英文混雜時以中文為主）
-            chinese_chars = re.findall(r'[\u4e00-\u9fff]', stem_clean)
-            english_words = re.findall(r'[a-zA-Z]+', stem_clean)
+            # 中文字：每一個 CJK 字元算 1
+            chinese_chars = re.findall(r'[\u4e00-\u9fff]', stem)
+            chinese_count = len(chinese_chars)
 
-            is_chinese = len(chinese_chars) >= len(english_words)
+            # 英文單字：連續英文字母視為 1 個 word
+            english_words = re.findall(r'[a-zA-Z]+', stem)
+            english_word_count = len(english_words)
+
+            # 總資訊長度 = 中文字數 + 英文單字數（標點自然不算）
+            total_units = chinese_count + english_word_count
+
+            # 判斷主語言：中文字數 >= 英文單字數 → 視為中文題
+            is_chinese = chinese_count >= english_word_count
+
             if is_chinese:
-                length = len(chinese_chars)
-                if length <= 15:
+                # 中文題：以 total_units 套用中文門檻
+                if total_units <= 15:
                     return 1
-                elif length <= 30:
+                elif total_units <= 30:
                     return 2
                 else:
                     return 3
             else:
-                word_count = len(stem_clean.split())
-                if word_count <= 10:
+                # 英文題：以 total_units 套用英文門檻
+                if total_units <= 10:
                     return 1
-                elif word_count <= 20:
+                elif total_units <= 20:
                     return 2
                 else:
                     return 3
-        
-        stem = assessment['question']['stem']
+
+        stem = assessment["question"]["stem"]
         grade = grade_stem_length(stem)
-        logger.debug(f"grade: {grade}, len: {len(stem)}, stem: {stem}")
+        logger.debug(
+            f"[stem_length] grade={grade}, stem='{stem}'"
+        )
         return grade
-        # return random.randint(1, 3)
     
 
     def _evaluate_2_to_7(self, assessment):
         question_str = json.dumps(assessment['question'], ensure_ascii=False)
-        logger.verbose(f"question_str: {question_str}")
-        user_content = f"""I have a Single Choice Question (SCQ) in the following JSON structure:
+        logger.verbose(f"question_str: {question_str}") 
+        user_content = f"""Evaluate the following Single Choice Question (SCQ). Use ONLY the SCQ content for your judgment.
+
+SCQ:
 {question_str}
 
-Evaluate the Single Choice Question (SCQ) based on the following six features. For each feature, assign a score of 1, 2, or 3, using the definitions provided. Your evaluation should be accurate and based only on the SCQ’s content.
+Score the SCQ on the six features below. For each feature, assign a score of 1, 2, or 3 based on its definition.
 
 1. stem_technical_term_density
   Rate how many technical terms appear in the question stem.
-  - 1 = Few or no technical terms (0–2)
-  - 2 = Moderate number of technical terms (2–4)
-  - 3 = Many technical terms (more than 3)
+  - 1 = Few (0–2 terms)  
+  - 2 = Moderate (3–4 terms)  
+  - 3 = Many (5 or more)
 
-2. stem_cognitive_level
-  Determine the cognitive demand of the stem based on Bloom’s taxonomy.
-  - 1 = Memorization (recall of facts)
-  - 2 = Understanding or synthesis (conceptual comprehension, combination)
-  - 3 = Analysis or evaluation (critical thinking, judgment)
+2. stem_cognitive_level  
+   Determine the cognitive level of the stem based on Bloom’s taxonomy.  
+   - 1 = Recall (remembering facts)  
+   - 2 = Understanding (conceptual comprehension)  
+   - 3 = Analysis/Evaluation (critical reasoning)
 
-3. option_average_length
-  Evaluate the average character length of the options.
-  - 1 = Short (1–4 words)
-  - 2 = Medium (3–6 words)
-  - 3 = Long (more than 5 words)
+3. option_average_length  
+   Evaluate the average length of the options.  
+   - 1 = Short (1–4 words)  
+   - 2 = Medium (5–8 words)  
+   - 3 = Long (9 or more words)
 
-4. option_similarity
-  Assess how similar the options are to each other in wording or meaning.
-  - 1 = Low similarity (less than 20%)
-  - 2 = Moderate similarity (around 50%)
-  - 3 = High similarity (greater than 80%)
+4. option_similarity  
+   Assess similarity among the options in wording or meaning.  
+   - 1 = Low similarity  
+   - 2 = Moderate similarity  
+   - 3 = High similarity
 
-5. stem_option_similarity
-  Evaluate how closely related the options are to the stem.
-  - 1 = High relevance (greater than 80%)
-  - 2 = Moderate relevance (around 50%)
-  - 3 = Low relevance (less than 20%)
+5. stem_option_similarity  
+   Evaluate how relevant the options are to the stem.  
+   - 1 = High relevance  
+   - 2 = Moderate relevance  
+   - 3 = Low relevance
 
-6. high_distractor_count
-  Count how many highly attractive distractors (incorrect but plausible options) are included.
-  - 1 = 1 strong distractor
-  - 2 = 2 strong distractors
-  - 3 = Include more than 3 strong distractors
- 
-Return only a JSON object like this:
+6. high_distractor_count  
+   Count plausible (attractive but incorrect) distractors.  
+   - 1 = 1 strong distractor  
+   - 2 = 2 strong distractors  
+   - 3 = 3 strong distractors
+
+Return ONLY a JSON object in the following format:
 {{
-    "stem_technical_term_density": 2,
-    "stem_cognitive_level": 3,
-    "option_average_length": 1,
-    "option_similarity": 2,
-    "stem_option_similarity": 3,
-    "high_distractor_count": 2
+    "stem_technical_term_density": 0,
+    "stem_cognitive_level": 0,
+    "option_average_length": 0,
+    "option_similarity": 0,
+    "stem_option_similarity": 0,
+    "high_distractor_count": 0
 }}
 """
         # logger.debug(f"user_content:\n{user_content}")
@@ -166,7 +178,13 @@ Return only a JSON object like this:
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful exam question evaluator. Please evaluate the question according to the feature keys and levels provided. Only return your response in JSON format."
+                "content": (
+                    "You are an exam question evaluator. "
+                    "Evaluate the SCQ strictly according to the scoring rules provided. "
+                    "Use only the SCQ content itself. "
+                    "Return ONLY a JSON object with the required keys and numeric scores. "
+                    "Do NOT include explanations, comments, or additional text."
+                )
             },
             {
                 "role": "user",
@@ -198,101 +216,6 @@ Return only a JSON object like this:
         logger.debug(f"evaluation_result: {evaluation_result}")
         
         return evaluation_result
-        # return {key: random.randint(1, 3) for key in ScqFeatures.keys[1:]}
-    
-
-#     def _evaluate_2_to_7(self, assessment):
-#         question_str = json.dumps(assessment['question'], ensure_ascii=False)
-#         logger.verbose(f"question_str: {question_str}")
-#         user_content = f"""I have a Single Choice Question (SCQ) in the following JSON structure:
-# {question_str}
-
-# Evaluate the Single Choice Question (SCQ) based on the following six features. For each feature, assign a score of 1, 2, or 3, using the definitions provided. Your evaluation should be accurate and based only on the SCQ’s content.
-
-# 1. stem_technical_term_density  
-#    Evaluate the presence of technical terms in the question stem.  
-#    Easy: A minimal use of technical terms, with only a few or none at all, making the question easy to comprehend.  
-#    Medium: A moderate presence of technical terms, adding some complexity without overwhelming the learner.  
-#    Hard: An abundant use of technical terms, challenging the learner and requiring a deep understanding of the subject matter.
-
-# 2. stem_cognitive_level  
-#    Assess the cognitive challenge posed by the stem, following Bloom's taxonomy.  
-#    Easy: A simple task of remembering basic facts or concepts, requiring only recall.  
-#    Medium: A task that goes beyond simple recall, requiring understanding or the synthesis of information.  
-#    Hard: A higher-level task that demands analysis, evaluation, or critical thinking, pushing the learner to make informed judgments.
-
-# 3. option_average_length  
-#    Determine the average length of the options provided.  
-#    Easy: The options should be brief and to the point, offering quick, easy choices for the learner.  
-#    Medium: The options should provide a moderate level of detail, balancing brevity with sufficient context for understanding.  
-#    Hard: The options should be substantial, providing enough information to challenge the learner's ability to discern the correct answer.
-
-# 4. option_similarity  
-#    Evaluate the degree of similarity among the options.  
-#    Easy: The options should be clearly distinct, offering no confusion for the learner.  
-#    Medium: The options should have some similarities, requiring careful consideration but still easily distinguishable.  
-#    Hard: The options should be highly similar, making it difficult for the learner to identify the correct answer without a deep understanding.
-
-# 5. stem_option_similarity  
-#    Assess the relevance of the options in relation to the stem.  
-#    Easy: The options should closely match the stem's content, making them directly relevant and easy to connect with the question.  
-#    Medium: The options should have a moderate relevance, still relating to the stem but leaving some room for thoughtful consideration.  
-#    Hard: The options should have minimal relevance, presenting only loose connections to the stem and requiring extra effort to link the two.
-
-# 6. high_distractor_count  
-#    Count the number of highly plausible but incorrect options included.  
-#    Easy: Only a single, strong distractor should be included, designed to mislead learners who do not fully understand the material.  
-#    Medium: Two strong distractors should be included, adding complexity and requiring the learner to carefully evaluate each option.  
-#    Hard: More than three strong distractors should be included, making the question challenging and testing the learner’s ability to critically assess all options.
- 
-# Return only a JSON object like this:
-# {{
-#     "stem_technical_term_density": 2,
-#     "stem_cognitive_level": 3,
-#     "option_average_length": 1,
-#     "option_similarity": 2,
-#     "stem_option_similarity": 3,
-#     "high_distractor_count": 2
-# }}
-# """
-#         # logger.debug(f"user_content:\n{user_content}")
-        
-#         messages = [
-#             {
-#                 "role": "system",
-#                 "content": "You are a helpful exam question evaluator. Please evaluate the question according to the feature keys and levels provided. Only return your response in JSON format."
-#             },
-#             {
-#                 "role": "user",
-#                 "content": user_content
-#             }
-#         ]
-#         response_format = {
-#             "type": "json_schema",
-#             "json_schema": {
-#                 "name": "evaluate_question",
-#                 "schema": {
-#                     "type": "object",
-#                     "properties": {
-#                         key: {"type": "integer", "minimum": 1, "maximum": 3}
-#                         for key in ScqFeatures.keys[1:]
-#                     },
-#                     "required": list(ScqFeatures.keys[1:]),
-#                     "additionalProperties": False
-#                 }
-#             }
-#         }
-#         params = {
-#             'messages': messages,
-#             'response_format': response_format,
-#         }
-#         pcl = TextParcel(params)
-#         evaluation = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
-#         evaluation_result = json.loads(evaluation.content['response'])
-#         logger.debug(f"evaluation_result: {evaluation_result}")
-        
-#         return evaluation_result
-#         # return {key: random.randint(1, 3) for key in ScqFeatures.keys[1:]}
 
 
     def evaluate(self, assessment):

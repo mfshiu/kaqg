@@ -11,6 +11,7 @@ app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
 from itertools import product
 import json
 import random
+import re
 
 import logging
 logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
@@ -55,6 +56,23 @@ class SingleChoiceGenerator(Agent):
 
 
     def handle_create(self, topic, pcl:TextParcel):
+        # question_criteria = {
+        #     'question_id': 'Q101',              # 使用者自訂題目 ID
+        #     'subject':  'Subject Name',         # 科目名稱
+        #     'document': 'Book Name',            # 教材名稱
+        #     'section': ['chapter1', 'ch1-1'],   # 指定章節
+        #     'difficulty': 50,                   # 難度 30, 50, 70
+        # }
+        question_criteria = pcl.content
+        logger.debug(f"question_criteria: {question_criteria}")
+        
+        generated = self.generate_question(question_criteria)
+
+        logger.info(f"generated_question: {generated}")
+        return generated
+
+
+    def handle_create_with_evaluatino(self, topic, pcl:TextParcel):
         # question_criteria = {
         #     'question_id': 'Q101',              # 使用者自訂題目 ID
         #     'subject':  'Subject Name',         # 科目名稱
@@ -223,18 +241,50 @@ class SingleChoiceGenerator(Agent):
         return prompt
 
 
+    def clean_string(self, s: str) -> str:
+        # 判斷是否包含中文
+        has_chinese = re.search(r'[\u4e00-\u9fff]', s) is not None
+
+        if has_chinese:
+            # 中文：移除所有空白（包含空格、tab、換行）
+            return re.sub(r'\s+', '', s)
+        else:
+            # 非中文：只 trim
+            return s.strip()
+        
+        
     def _chat(self, prompt_text):
         messages = [
-            {"role": "system", 
-             "content": """You are a helpful exam question generator. 
-The question you created is a multiple-choice question with only one answer.
-Please respond in the same language as the content provided."""},
-            {"role": "user", 
-             "content": f"""{prompt_text}
-Please response only valid JSON output.
-Do NOT wrap it with ``` or markdown."""}
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful exam question generator. "
+                    "You must create exactly ONE single-answer multiple-choice question with 4 options: A, B, C, D. "
+                    "All content in the question (stem and options) must be derived from the provided text materials. "
+                    "The stem and all options MUST be written in Traditional Chinese (zh-TW), "
+                    "except for necessary technical terms or proper nouns in other languages. "
+                    "Distribute the correct option randomly (do not always use A). "
+                    "Do NOT provide any explanations or analysis. "
+                    "All of your responses MUST use ONLY the following JSON structure, and you must "
+                    "NOT include any extra text outside the JSON object: "
+                    "{\"stem\":\"...\",\"option_A\":\"...\",\"option_B\":\"...\","
+                    "\"option_C\":\"...\",\"option_D\":\"...\",\"answer\":\"...\"}. "
+                    "The value of the \"answer\" field MUST be exactly one of: \"A\", \"B\", \"C\", or \"D\". "
+                    "You MUST NOT return option_A, option_B, option_C, option_D, or any other text "
+                    "in the answer field."
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"{prompt_text}\n\n"
+                    "Based on the features and text materials above, generate ONE single-answer "
+                    "multiple-choice question in Traditional Chinese (zh-TW). Return ONLY a valid JSON object "
+                    "with the keys: \"stem\", \"option_A\", \"option_B\", \"option_C\", \"option_D\", \"answer\". "
+                    "Do NOT wrap the JSON with ``` or any markdown, and do NOT add any extra text."
+                )
+            }
         ]
-        
         response_format = {
             "type": "json_schema",
             "json_schema": {
@@ -249,7 +299,6 @@ Do NOT wrap it with ``` or markdown."""}
                         "option_D": {"type": "string"},
                         "answer": {"type": "string"},
                     },
-
                     "required": [
                         "stem",
                         "option_A",
@@ -265,7 +314,7 @@ Do NOT wrap it with ``` or markdown."""}
 
         params = {
             'messages': messages,
-            'response_format': response_format,
+            # 'response_format': response_format,
         }
         
         pcl = TextParcel(params)
@@ -274,6 +323,12 @@ Do NOT wrap it with ``` or markdown."""}
         response = None
         try:
             response = app_helper.load_json(json_text:=question.content['response'])
+            if response:
+                response['stem'] = self.clean_string(response['stem'])
+                response['option_A'] = self.clean_string(response['option_A'])
+                response['option_B'] = self.clean_string(response['option_B'])
+                response['option_C'] = self.clean_string(response['option_C'])
+                response['option_D'] = self.clean_string(response['option_D'])
         except json.JSONDecodeError as e:
             logger.exception(e)
             logger.error(f"Original response: {json_text}")
@@ -330,27 +385,16 @@ Do NOT wrap it with ``` or markdown."""}
         
         materials_text = '\n'.join(text_materials[:50])
         
-        prompt_text =  f"""You are an exam question creator tasked with generating multiple-choice questions based on the given features and text. Follow these instructions carefully:
-1.Create single-answer multiple-choice questions (4 options: A, B, C, D).
-2.Include the correct answer and ensure the correct option is distributed randomly (not concentrated in A).
-3.Do not provide explanations or analysis of the questions or answers.
-4.Please respond in the same language as the text materilas provided.
-5.All content in the question, including the stem and options, must be derived from the material text.
-6.Output the result in a json format with the following keys:
-    - stem
-    - option_A
-    - option_B
-    - option_C
-    - option_D
-    - answer (only indicate the correct option: A, B, C, or D).
+        prompt_text = f"""
+You are given feature descriptions and source text for generating an exam question.
 
 Features:
 {features_text}
 
-Text materilas:
+Text materials:
 {materials_text}
 """
-        logger.verbose(f"prompt_text:\n{prompt_text}")
+        logger.verbose(f"prompt_text:\n{prompt_text}") # type: ignore
         question = self._chat(prompt_text)
         if isinstance(question, list):
             question = question[0]

@@ -14,7 +14,9 @@ logger:logging.Logger = logging.getLogger(os.getenv('LOGGER_NAME'))
 
 from agentflow.core.agent import Agent
 from agentflow.core.parcel import TextParcel
-from services.llms.chat_llm import BaseLLM, ChatLLM
+from services.llms.base_llm import BaseLLM
+from services.llms.chat_llm import ChatLLM
+from services.llms.ossgpt_llm import OssGptLLM
 
 
 
@@ -27,9 +29,10 @@ class LlmModel(Enum):
     def _generate_next_value_(name, start, count, last_values):
         return name
 
-    ChatGPT = auto()
+    ChatGpt = auto()
     Claude = auto()
     LLama = auto()
+    OssGpt = auto()
 
 
 
@@ -38,7 +41,7 @@ class LlmService(Agent):
     TOPIC_LLM_PROMPT = Topic.LLM_PROMPT.value
 
     _default_llm_params = {
-        'llm': LlmModel.ChatGPT,
+        'name': LlmModel.ChatGpt,
     }
     
     
@@ -46,22 +49,28 @@ class LlmService(Agent):
         logger.debug(f"{LlmService.__name__}.{self.__init__.__name__}")
         super().__init__(LlmService.SERVICE_NAME, agent_config)
         self.llm_params = agent_config.get('llm')
+        logger.debug(f"self.llm_params: {self.llm_params}")
 
 
     @staticmethod
     def _generate_llm_model(llm_params=None):
-        params = LlmService._default_llm_params.copy()
+        params:dict = LlmService._default_llm_params.copy()
         if llm_params:
             params.update(llm_params)
 
-        if params['llm'] == LlmModel.ChatGPT:
-            llm = ChatLLM(params)
-        elif params['llm'] == LlmModel.Claude:
-            llm = ChatLLM(params)
-        elif params['llm'] == LlmModel.LLama:
-            llm = ChatLLM(params)
+        llm_name = params['name']
+        llm_config = params[llm_name]
+        logger.debug(f"llm_name: {llm_name}, llm_config: {llm_config}")
+        if llm_name == LlmModel.ChatGpt.value:
+            llm = ChatLLM(llm_config)
+        elif llm_name == LlmModel.Claude.value:
+            llm = ChatLLM(llm_config)
+        elif llm_name == LlmModel.LLama.value:
+            llm = ChatLLM(llm_config)
+        elif llm_name == LlmModel.OssGpt.value:
+            llm = OssGptLLM(llm_config)
         else:
-            llm = ChatLLM(params)
+            llm = ChatLLM(llm_config)
         
         return llm
     
@@ -97,7 +106,7 @@ if __name__ == '__main__':
             self.subscribe(self.agent_id)
             
             pcl = TextParcel({
-                'prompt': "現在的美國總統是誰？",
+                'messages': "現在的美國總統是誰？",
                 }, topic_return=self.agent_id)
             logger.info(self.M(f"pcl: {pcl}"))
             self.publish(LlmService.TOPIC_LLM_PROMPT, pcl)
@@ -116,6 +125,7 @@ if __name__ == '__main__':
     else:
         config = app_helper.get_agent_config()
         config['llm'] = app_helper.config['service']['llm']
+        logger.debug(f"config['llm']:\n{config['llm']}")
         llm_agent = LlmService(config)
         llm_agent.start_process()
         app_helper.wait_agent(llm_agent)

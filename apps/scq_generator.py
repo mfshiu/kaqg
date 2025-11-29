@@ -182,7 +182,7 @@ if __name__ == "__main__":
     score = 15
 
     # init chatbot
-    api_key=app_helper.config['service']['llm']['openai_api_key']
+    api_key=app_helper.config['service']['llm']['ChatGpt']['openai_api_key']
     generator = GetSCQGeneratorPrompt(api_key)
 
     res = generator.generate_scq(score, text_materials)

@@ -1,6 +1,6 @@
+# pdf_retriever.py
 # Required when executed as the main program.
 import os, sys
-from urllib import response
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
@@ -29,7 +29,7 @@ class PdfRetriever(Agent):
 
 
     def __init__(self, config:dict):
-        logger.info(f"config: {config}")
+        logger.debug(f"config: {config}")
         super().__init__(name='pdf.retrieval.wp', agent_config=config)
 
 
@@ -172,7 +172,8 @@ class PdfRetriever(Agent):
         """
         
         pdf_import = PdfImport(file_path)
-        return pdf_import.extract_pages()
+        return pdf_import.extract_content()
+        # return pdf_import.extract_pages()
         # Example of return.
         # return [
         #     '104 年全國各縣市焚化底渣產量約占焚化量之 15%。',
@@ -233,9 +234,26 @@ Output: Hattie, hopefuls, stand
         return facts
 
 
-    def _extract_concepts(self, identified_facts, page_content):
-        # identified_facts = [item for item in identified_facts if item]
-        
+    def _extract_concepts(
+        self,
+        identified_facts,
+        page_content,
+        _depth: int = 0,
+        _max_depth: int = 3,
+    ):
+        # 基本保護：空集合或超過深度時直接回傳
+        if not identified_facts:
+            logger.debug("_extract_concepts: empty identified_facts, return {}")
+            return {}
+
+        if _depth >= _max_depth:
+            logger.warning(
+                "_extract_concepts: reach max_depth=%s, stop recursion. remaining facts: %s",
+                _max_depth,
+                identified_facts,
+            )
+            return {}
+
         prompt = f"""Given the following article:
 {page_content}
 
@@ -259,28 +277,53 @@ Example output:
     "Cultural Aspect": ["night market culture", "Shilin Night Market", "Raohe Street Night Market"]
 }}
 """
-        messages=[
+        messages = [
             {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt}
-            ]
-        params = {
-            'messages': messages,
-        }            
+            {"role": "user", "content": prompt},
+        ]
+        params = {"messages": messages}
         pcl = TextParcel(params)
         logger.verbose(f"pcl: {pcl}")
 
         chat_response = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
-        concepts_text = chat_response.content['response'].strip()
+        concepts_text = chat_response.content["response"].strip()
         logger.verbose(f"concepts_text: {concepts_text}")
-        concepts_dict = app_helper.load_json(concepts_text)
-        
-        logger.debug(f"concepts_dict: {concepts_dict}")
-        concepted_facts = set(item for sublist in concepts_dict.values() for item in sublist)
-        # lost_facts = [a for a in identified_facts if not any(a in sublist for sublist in concepts_dict.values())]
-        if lost_facts := [a for a in identified_facts if a not in concepted_facts]:
-            new_concepts_dict = self._extract_concepts(lost_facts, page_content)
-            logger.warning(f"new_concepts_dict: {new_concepts_dict}")
+
+        concepts_dict = app_helper.load_json(concepts_text) or {}
+        logger.debug(f"concepts_dict(depth={_depth}): {concepts_dict}")
+
+        concepted_facts = set(
+            item for sublist in concepts_dict.values() for item in sublist
+        )
+
+        lost_facts = [a for a in identified_facts if a not in concepted_facts]
+        logger.debug(
+            "_extract_concepts(depth=%s): identified=%s, concepted=%s, lost=%s",
+            _depth,
+            len(identified_facts),
+            len(concepted_facts),
+            len(lost_facts),
+        )
+
+        # 只在「集合真的縮小」時才遞迴，避免同一批 facts 一直重跑
+        if (
+            lost_facts
+            and len(lost_facts) < len(identified_facts)
+            and _depth + 1 < _max_depth
+        ):
+            new_concepts_dict = self._extract_concepts(
+                lost_facts, page_content, _depth=_depth + 1, _max_depth=_max_depth
+            )
+            logger.warning(
+                "new_concepts_dict(depth=%s): %s", _depth + 1, new_concepts_dict
+            )
             concepts_dict.update(new_concepts_dict)
+        elif lost_facts:
+            logger.warning(
+                "_extract_concepts: stop recursion (no contraction or reach limit). "
+                "remaining facts not grouped into any concept: %s",
+                lost_facts,
+            )
 
         return concepts_dict
         
@@ -492,6 +535,11 @@ Example output:
 
 
 if __name__ == '__main__':
+    llm_config = app_helper.config['service']['llm']['ChatGpt']
+    openai_api_key = llm_config.get('openai_api_key', '')
+    os.environ['OPENAI_API_KEY'] = openai_api_key
+    logger.info(f"OPENAI_API_KEY: {openai_api_key[:10]}***{openai_api_key[-5:]}")
+    
     agent = PdfRetriever(app_helper.get_agent_config())
     agent.start_process()
     app_helper.wait_agent(agent)

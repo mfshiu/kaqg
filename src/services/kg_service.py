@@ -135,7 +135,7 @@ class KnowledgeGraphService(Agent):
             for section in sections:
                 for concept in kg.query_nodes_related_by(section['element_id'], 'include_in', 'concept'):
                     unique_concepts[concept['element_id']] = concept  # Ensures uniqueness
-                    
+
         concepts = list(unique_concepts.values())
         logger.debug(f"concepts: {concepts[:10]}..")
 

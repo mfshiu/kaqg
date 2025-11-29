@@ -22,14 +22,17 @@ from knowsys.docker_management import DockerManager
 
 
 class TestAgent(unittest.TestCase):
-    test_files = ['Pdf01-台文.pdf', 'Pdf01-English.pdf', 'Pdf01-日本語.pdf']
+    kg_name = 'S01'
+    # test_files = ['Pdf01-台文.pdf', 'Pdf01-English.pdf', 'Pdf01-日本語.pdf']
+    test_files = ['1.廢棄物管理概論(甲乙丙級).pdf']
+    # test_files = ['Pdf01-台文.pdf']
     file_ids = []
     filenames = []
     
     class ValidationAgent(Agent):
         def __init__(self):
             super().__init__(name='main', agent_config=app_helper.get_agent_config())
-            self.kg_name = 'TestKG'
+            self.kg_name = TestAgent.kg_name
             kg_config = app_helper.config['service']['kg']
             logger.info(f"kg_config: {kg_config}")
             self.docker_management = DockerManager(kg_config['hostname'], kg_config['datapath'])

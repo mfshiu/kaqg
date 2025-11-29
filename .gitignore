@@ -173,6 +173,7 @@ doc/
 exe_test/
 path/
 src/knowsys/data/
+test/
 
 kaqg.toml
 mosquitto.bat

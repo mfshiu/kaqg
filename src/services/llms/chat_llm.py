@@ -31,24 +31,13 @@ class ChatLLM(BaseLLM):
         self.temperature = self.params.get('temperature')
         self.streaming = self.params.get('streaming')
         self.api_key = self.params.get('openai_api_key')
+        if not self.api_key:
+            raise ValueError("OpenAI API key is required for ChatLLM.")
 
         self.client = OpenAI(api_key=self.api_key)
 
 
     def generate_response(self, params):
-        """
-        Generate a response from an OpenAI chat model.
-
-        Args:
-            params (str | list[dict] | dict): 
-                - If str: treated as a single prompt.
-                - If list of dicts: treated as a messages array.
-                - If dict: should include a 'messages' key and optionally other settings 
-                like 'model', 'temperature', etc.
-
-        Returns:
-            str: The generated response text (streamed or full depending on settings).
-        """
         if isinstance(params, str):
             # prompt text only
             messages = [{"role": "user", "content": params}]
@@ -123,7 +112,7 @@ if __name__ == '__main__':
     }
     
     params = {
-        'openai_api_key': app_helper.config['service']['llm']['openai_api_key'],
+        'openai_api_key': app_helper.config['service']['llm']['ChatGpt']['openai_api_key'],
         'model': 'gpt-4o-mini',
         'response_format': response_format,
         'streaming': False,
