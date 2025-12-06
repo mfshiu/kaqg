@@ -405,8 +405,8 @@ Text materials:
             return question, combination
         else:
             return None, None
-    
-    
+
+
     def _generate_text_materials(self, subject, fact_nodes):
         def generate_text_from_paths(records):
             """

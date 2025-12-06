@@ -300,55 +300,85 @@ class KnowledgeGraph:
     def query_subsections(self, document, section_path=None):
         def _query_subsections(self, document, section_path=None):
             logger.verbose(f"Querying subsections for document: {document}, section_path: {section_path}")
-            
+
             def fetch_all_subsections(session, parent_path):
+                last_node = parent_path[-1]
+                if last_node is None:
+                    return [parent_path]
+
                 query = """
                 MATCH (sec:structure {name: $last_section})
                 OPTIONAL MATCH (sub:structure)-[:part_of]->(sec)
                 RETURN collect(sub) AS subsections
                 """
-                
-                last_section = parent_path[-1]["name"]
-                result = session.run(query, last_section=last_section)
-                subsections = result.single()["subsections"]
-                
+                last_section = last_node["name"]
+                record = session.run(query, last_section=last_section).single()
+                if not record:
+                    return [parent_path]
+
+                subsections = [s for s in record["subsections"] if s is not None]
+
                 all_paths = [parent_path]
-                if subsections:
-                    for sub in subsections:
-                        all_paths.extend(fetch_all_subsections(session, parent_path + [sub]))
-                
+                for sub in subsections:
+                    all_paths.extend(fetch_all_subsections(session, parent_path + [sub]))
                 return all_paths
-            
-            
+
             with self.driver.session() as session:
+
+                # --- 有 section_path 的情況 ---
                 if section_path:
                     initial_nodes = []
                     for section in section_path:
-                        query = """
-                        MATCH (sec:structure {name: $section})
-                        RETURN sec
-                        """
-                        result = session.run(query, section=section)
-                        node = result.single()["sec"]
-                        if node:
-                            initial_nodes.append(node)
-                    
-                    return fetch_all_subsections(session, initial_nodes)
-                else:
-                    query = """
+                        record = session.run(
+                            "MATCH (sec:structure {name: $section}) RETURN sec",
+                            section=section
+                        ).single()
+
+                        if record and record["sec"]:
+                            initial_nodes.append(record["sec"])
+
+                    if initial_nodes:
+                        # 找到 structure，正常展開
+                        all_paths = []
+                        for n in initial_nodes:
+                            all_paths.extend(fetch_all_subsections(session, [n]))
+                        return all_paths
+
+                    # ⭐ section_path 有值但找不到 structure → 你要的行為：
+                    # ⭐⭐ 再呼叫一次，等同沒有 section_path ⭐⭐
+                    logger.warning(
+                        f"No structure found for section_path={section_path}, "
+                        f"recursively fallback to query_subsections(document, None)."
+                    )
+                    return self.query_subsections(document, None)
+
+
+
+                # --- section_path = None 的情況 ---
+                record = session.run(
+                    """
                     MATCH (doc:document {name: $document})
                     OPTIONAL MATCH (sec:structure)-[:part_of]->(doc)
                     RETURN collect(sec) AS sections
-                    """
-                    result = session.run(query, document=document)
-                    sections = result.single()["sections"]
-                    
-                    all_paths = []
-                    if sections:
-                        for section in sections:
-                            all_paths.extend(fetch_all_subsections(session, [section]))
-                    return all_paths
-    
+                    """,
+                    document=document
+                ).single()
+
+                sections = []
+                if record:
+                    sections = [s for s in record["sections"] if s is not None]
+
+                if not sections:
+                    # 文件底下也沒有任何 structure，直接回傳空
+                    logger.verbose(f"Document '{document}' has no structure nodes.")
+                    return []
+
+                all_paths = []
+                for sec in sections:
+                    all_paths.extend(fetch_all_subsections(session, [sec]))
+                return all_paths
+
+        # serialize 最終節點
         sectionss = _query_subsections(self, document, section_path)
         return [self.serialize_node(sections[-1]) for sections in sectionss]
 
