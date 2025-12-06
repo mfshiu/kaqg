@@ -1,12 +1,15 @@
 colorama
+docker
+neo4j
+networkx
 numpy
 openai
 paho-mqtt
 pdfplumber
 Pillow
 PyMuPDF
-networkx
-toml
 PyYAML
+requests
+toml
 
 mas-agentflow

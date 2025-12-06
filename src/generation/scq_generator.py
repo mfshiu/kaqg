@@ -1,8 +1,6 @@
+# scq_generator.py
 # Required when executed as the main program.
 import os, sys
-
-from generation.ranker.wm_ranker import WasteManagementRanker
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import app_helper
 app_helper.initialize(os.path.splitext(os.path.basename(__file__))[0])
