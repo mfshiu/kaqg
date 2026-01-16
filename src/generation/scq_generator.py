@@ -250,28 +250,24 @@ class SingleChoiceGenerator(Agent):
             # 非中文：只 trim
             return s.strip()
         
+
+    def _normalize_answer_key(self, answer: str) -> str:
+        if not answer:
+            return "D"
+        a = str(answer).strip().upper()
+
+        mapping = {
+            "A": "A", "B": "B", "C": "C", "D": "D",
+            "OPTION_A": "A", "OPTION_B": "B",
+            "OPTION_C": "C", "OPTION_D": "D",
+            "1": "A", "2": "B", "3": "C", "4": "D"
+        }
+        return mapping.get(a, "D")  # 無法解讀就當 D，避免整個流程爆掉
+
         
     def _chat(self, prompt_text):
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful exam question generator. "
-                    "You must create exactly ONE single-answer multiple-choice question with 4 options: A, B, C, D. "
-                    "All content in the question (stem and options) must be derived from the provided text materials. "
-                    "The stem and all options MUST be written in Traditional Chinese (zh-TW), "
-                    "except for necessary technical terms or proper nouns in other languages. "
-                    "Distribute the correct option randomly (do not always use A). "
-                    "Do NOT provide any explanations or analysis. "
-                    "All of your responses MUST use ONLY the following JSON structure, and you must "
-                    "NOT include any extra text outside the JSON object: "
-                    "{\"stem\":\"...\",\"option_A\":\"...\",\"option_B\":\"...\","
-                    "\"option_C\":\"...\",\"option_D\":\"...\",\"answer\":\"...\"}. "
-                    "The value of the \"answer\" field MUST be exactly one of: \"A\", \"B\", \"C\", or \"D\". "
-                    "You MUST NOT return option_A, option_B, option_C, option_D, or any other text "
-                    "in the answer field."
-                )
-            },
+            { "role": "system", "content": ("You are a helpful exam question generator. ...") },
             {
                 "role": "user",
                 "content": (
@@ -283,85 +279,112 @@ class SingleChoiceGenerator(Agent):
                 )
             }
         ]
-        response_format = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "generate_question",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "stem": {"type": "string"},
-                        "option_A": {"type": "string"},
-                        "option_B": {"type": "string"},
-                        "option_C": {"type": "string"},
-                        "option_D": {"type": "string"},
-                        "answer": {"type": "string"},
-                    },
-                    "required": [
-                        "stem",
-                        "option_A",
-                        "option_B",
-                        "option_C",
-                        "option_D",
-                        "answer"
-                    ],
-                    "additionalProperties": False
-                }
-            }
-        }
 
-        params = {
-            'messages': messages,
-            # 'response_format': response_format,
-        }
-        
+        params = { 'messages': messages }
+
         pcl = TextParcel(params)
-        question = self.publish_sync(LlmService.TOPIC_LLM_PROMPT, pcl)
+
+        try:
+            # 先嘗試呼叫 LLM
+            question = self.publish_sync(
+                LlmService.TOPIC_LLM_PROMPT,
+                pcl,
+                timeout=240
+            )
+        except TimeoutError:
+            logger.error("LLM 產生試題逾時")
+            # 直接回傳錯誤假題
+            return self._build_error_question("LLM 產生試題逾時，請稍後再試。")
+        except Exception as e:
+            logger.exception(e)
+            return self._build_error_question("LLM 呼叫發生未預期錯誤。")
 
         response = None
         try:
-            response = app_helper.load_json(json_text:=question.content['response'])
+            response = app_helper.load_json(json_text := question.content['response'])
             if response:
-                response['stem'] = self.clean_string(response['stem'])
-                response['option_A'] = self.clean_string(response['option_A'])
-                response['option_B'] = self.clean_string(response['option_B'])
-                response['option_C'] = self.clean_string(response['option_C'])
-                response['option_D'] = self.clean_string(response['option_D'])
+                response['stem'] = self.clean_string(response.get('stem', ''))
+                response['option_A'] = self.clean_string(response.get('option_A', ''))
+                response['option_B'] = self.clean_string(response.get('option_B', ''))
+                response['option_C'] = self.clean_string(response.get('option_C', ''))
+                response['option_D'] = self.clean_string(response.get('option_D', ''))
+
+                # ✅ 先正規化 answer，避免出現 "option_C"、"1" 等奇怪值
+                raw_ans = response.get('answer', '')
+                response['answer'] = self._normalize_answer_key(raw_ans)
+
+                # ✅ 檢查選項是否完整，否則直接回錯誤假題
+                if not all(response.get(k, '').strip() for k in
+                           ['option_A', 'option_B', 'option_C', 'option_D']):
+                    logger.error(f"LLM 回傳選項不完整: {response}")
+                    return self._build_error_question("LLM 回傳選項不完整，請稍後再試。")
+
         except json.JSONDecodeError as e:
             logger.exception(e)
             logger.error(f"Original response: {json_text}")
-            response = None
+            # 回傳格式錯誤的假題
+            response = self._build_error_question("LLM 回傳格式錯誤，請稍後再試。")
+        except Exception as e:
+            logger.exception(e)
+            response = self._build_error_question("LLM 回應處理失敗，請稍後再試。")
 
-        return app_helper.fix_json_keys(response) if response else None
+        return app_helper.fix_json_keys(response) if response else self._build_error_question("未知錯誤，請稍後再試。")
+
+
+    def _build_error_question(self, message: str) -> dict:
+        """產生一題顯示錯誤用的假題（維持題目 JSON 結構）"""
+        msg = self.clean_string(message)
+        return {
+            "stem": f"【系統錯誤】{msg}（此題僅為占位顯示，請勿作答與納入正式測驗。）",
+            "option_A": "系統產生試題逾時或失敗。",
+            "option_B": "請重新整理頁面或稍後再試。",
+            "option_C": "請聯絡系統管理員以協助處理。",
+            "option_D": "以上皆是（此題為錯誤提示用假題）。",
+            "answer": "D"  # 隨便給一個合法選項，避免前端壞掉
+        }
 
 
     def __shuffle_options(self, question):
-        # Extract original options
-        original_options = {
-            "A": question["option_A"],
-            "B": question["option_B"],
-            "C": question["option_C"],
-            "D": question["option_D"]
-        }
-        correct_answer_text = original_options[question["answer"]]
+        try:
+            # ✅ 先確保 answer 是 A~D 之一
+            answer_key = self._normalize_answer_key(question.get("answer", ""))
 
-        # Shuffle options
-        shuffled_items = list(original_options.items())
-        random.shuffle(shuffled_items)
+            # ✅ 用 get，避免 KeyError；空字串代表 LLM 沒給
+            original_options = {
+                "A": question.get("option_A", ""),
+                "B": question.get("option_B", ""),
+                "C": question.get("option_C", ""),
+                "D": question.get("option_D", "")
+            }
 
-        # Build new question structure
-        new_question = {
-            "stem": question["stem"]
-        }
+            # 若選項內容不完整，視為錯誤題
+            if not all(original_options.values()):
+                raise ValueError(f"選項內容不完整: {original_options}")
 
-        for idx, (_, text) in enumerate(shuffled_items):
-            key = chr(ord("A") + idx)
-            new_question[f"option_{key}"] = text
-            if text == correct_answer_text:
-                correct_new_key = key
+            correct_answer_text = original_options[answer_key]
 
-        new_question["answer"] = correct_new_key
-        return new_question
+            # Shuffle options
+            shuffled_items = list(original_options.items())
+            random.shuffle(shuffled_items)
+
+            new_question = {
+                "stem": question.get("stem", "")
+            }
+            correct_new_key = "D"  # default 保險值
+
+            for idx, (_, text) in enumerate(shuffled_items):
+                key = chr(ord("A") + idx)
+                new_question[f"option_{key}"] = text
+                if text == correct_answer_text:
+                    correct_new_key = key
+
+            new_question["answer"] = correct_new_key
+            return new_question
+
+        except Exception as e:
+            logger.exception(e)
+            # ✅ 任何錯誤都不要讓整個流程爆掉，回錯誤假題
+            return self._build_error_question("LLM 回傳試題格式錯誤，請稍後再試。")
 
 
     def _make_question(self, text_materials, difficulty):

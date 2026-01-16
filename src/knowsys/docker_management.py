@@ -178,7 +178,7 @@ class DockerManager:
         :return: tuple:
             (http_url, bolt_url)
         """
-        print(f"Checking if KG '{kgName}' is already running...")
+        print(f"Opening KG '{kgName}' ...")
 
         # 取得所有正在運行的 KG
         running_kgs = self.list_running_KGs()
@@ -186,7 +186,7 @@ class DockerManager:
         # 檢查 KG 是否已在運行
         for container_name, http_port, bolt_port in running_kgs:
             if container_name == kgName:
-                print(f"KG '{kgName}' is already running. HTTP at: http://{self.hostname}:{http_port}, BOLT at: bolt://{self.hostname}:{bolt_port}")
+                print(f"KG '{kgName}', HTTP at: http://{self.hostname}:{http_port}, BOLT at: bolt://{self.hostname}:{bolt_port}")
                 return f"http://{self.hostname}:{http_port}", f"bolt://{self.hostname}:{bolt_port}"
 
         raise ValueError(f"KG '{kgName}' is not running. Please create it first.")
