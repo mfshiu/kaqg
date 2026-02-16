@@ -63,12 +63,26 @@ class SingleChoiceGenerator(Agent):
         # }
         question_criteria = pcl.content
         logger.debug(f"question_criteria: {question_criteria}")
-        
-        generated = self.generate_question(question_criteria)
 
-        logger.info(f"generated_question: {generated}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            generated = self.generate_question(question_criteria)
+            if self._is_valid_question(generated):
+                logger.info(f"generated_question: {generated}")
+                return generated
+            logger.warning(f"Empty or invalid question (attempt {attempt + 1}/{max_retries}), retrying...")
+        logger.error("Failed to generate valid question after retries")
         return generated
 
+    def _is_valid_question(self, assessment) -> bool:
+        """檢查 assessment 是否包含有效的題目（非空 stem）"""
+        if not assessment or not isinstance(assessment, dict):
+            return False
+        q = assessment.get('question')
+        if not q or not isinstance(q, dict):
+            return False
+        stem = (q.get('stem') or '').strip()
+        return bool(stem and not stem.startswith('【系統錯誤】'))
 
     def handle_create_with_evaluatino(self, topic, pcl:TextParcel):
         # question_criteria = {
@@ -83,24 +97,30 @@ class SingleChoiceGenerator(Agent):
         
         try_count = 0
         generated_questions = []  # List to store all generated questions with their evaluation results
-        generated = self.generate_question(question_criteria)
         grade_criteria = SingleChoiceGenerator.difficulty_mapping[question_criteria['difficulty']]
+        passed = False
 
         while try_count < 3:
+            generated = self.generate_question(question_criteria)
+            if not generated or not self._is_valid_question(generated):
+                logger.warning(f"Empty or invalid question (attempt {try_count + 1}/3), retrying...")
+                try_count += 1
+                continue
             passed, grade_value = self.evaluate_question(generated, grade_criteria)
-            generated_questions.append((generated, passed, grade_value))  # Store the generated question along with its evaluation
+            generated_questions.append((generated, passed, grade_value))
 
-            if passed:  # If the question passes, stop the loop
+            if passed:
                 break
-
             logger.info(f"Retrying question generation...")
             try_count += 1
-            generated = self.generate_question(question_criteria)
 
         # If no question passed after 3 tries, choose the one with the minimum difference between grade_value and grade_criteria
-        if not passed:
+        if not passed and generated_questions:
             best_generated = min(generated_questions, key=lambda x: abs(x[2] - grade_criteria))[0]
             generated = best_generated
+        elif not generated_questions:
+            # 所有重試皆為空題目，最後一次嘗試
+            generated = self.generate_question(question_criteria)
 
         logger.debug(f"try_count: {try_count}")
         logger.info(f"generated_question: {generated}")
@@ -301,8 +321,14 @@ class SingleChoiceGenerator(Agent):
 
         response = None
         try:
-            response = app_helper.load_json(json_text := question.content['response'])
+            raw = app_helper.load_json(json_text := question.content['response'])
+            # LLM 可能回傳 list（如 [{}]），取第一個有效 dict
+            if isinstance(raw, list):
+                response = next((x for x in raw if isinstance(x, dict) and x), None)
+            elif isinstance(raw, dict) and raw:
+                response = raw
             if response:
+                response = dict(response)  # 避免修改原始物件
                 response['stem'] = self.clean_string(response.get('stem', ''))
                 response['option_A'] = self.clean_string(response.get('option_A', ''))
                 response['option_B'] = self.clean_string(response.get('option_B', ''))
@@ -313,7 +339,10 @@ class SingleChoiceGenerator(Agent):
                 raw_ans = response.get('answer', '')
                 response['answer'] = self._normalize_answer_key(raw_ans)
 
-                # ✅ 檢查選項是否完整，否則直接回錯誤假題
+                # ✅ 檢查 stem 與選項是否完整，否則直接回錯誤假題
+                if not (response.get('stem') or '').strip():
+                    logger.error(f"LLM 回傳空題幹: {response}")
+                    return self._build_error_question("LLM 回傳空題幹，請稍後再試。")
                 if not all(response.get(k, '').strip() for k in
                            ['option_A', 'option_B', 'option_C', 'option_D']):
                     logger.error(f"LLM 回傳選項不完整: {response}")
@@ -328,7 +357,7 @@ class SingleChoiceGenerator(Agent):
             logger.exception(e)
             response = self._build_error_question("LLM 回應處理失敗，請稍後再試。")
 
-        return app_helper.fix_json_keys(response) if response else self._build_error_question("未知錯誤，請稍後再試。")
+        return app_helper.fix_json_keys(response) if response and isinstance(response, dict) else self._build_error_question("未知錯誤，請稍後再試。")
 
 
     def _build_error_question(self, message: str) -> dict:
@@ -418,14 +447,15 @@ Text materials:
         logger.verbose(f"prompt_text:\n{prompt_text}") # type: ignore
         question = self._chat(prompt_text)
         if isinstance(question, list):
-            question = question[0]
+            question = question[0] if question else None
         logger.info(f"type:{type(question)}, question: {question}")
-        if question:
+        if question and (question.get("stem") or "").strip():
             if 'D' != question.get("answer"):
                 question = self.__shuffle_options(question)
             return question, combination
-        else:
-            return None, None
+        # 題目無效時回傳錯誤題而非 None，避免產生空題目
+        logger.warning("LLM 回傳無效題目，改回錯誤提示題")
+        return self._build_error_question("LLM 回傳無效題目，請稍後再試。"), combination
 
 
     def _generate_text_materials(self, subject, fact_nodes):
