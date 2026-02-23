@@ -187,6 +187,16 @@ def get_config_path():
     return os.getenv('WASTEPRO_CONFIG_PATH', os.path.join(os.getcwd(), 'kaqg.toml'))
 
 
+def get_generation_data_directory():
+    """回傳 generation 模組資料目錄的絕對路徑（由 kaqg.toml [service.generation] data_directory 決定）。"""
+    global config
+    path = config.get('service', {}).get('generation', {}).get('data_directory', '_data/generation')
+    if os.path.isabs(path):
+        return os.path.normpath(path)
+    root = os.path.dirname(get_config_path())
+    return os.path.normpath(os.path.join(root, path))
+
+
 def get_agent_config():
     global config
 

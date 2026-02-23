@@ -59,7 +59,13 @@ class TestAgent(unittest.TestCase):
 
 
     def test_1(self):
-        time.sleep(30)
+        # 等待 CREATE 回覆（建立容器 + Neo4j 就緒可能超過 30 秒，最多等 180 秒）
+        timeout = 180
+        step = 2
+        for _ in range(0, timeout, step):
+            if TestAgent.kg_name is not None:
+                break
+            time.sleep(step)
 
         try:
             self._do_test_1()

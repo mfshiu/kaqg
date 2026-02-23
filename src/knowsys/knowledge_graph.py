@@ -297,6 +297,33 @@ class KnowledgeGraph:
             return [self.serialize_node(record["m"]) for record in result]
 
 
+    def query_all_relationships(self, element_id):
+        """
+        取得指定節點的所有連出與連入關聯。
+        :param element_id: 節點的 element_id（Neo4j 唯一識別）
+        :return: list of (subject_name, relation_type, object_name)，主謂賓三元組
+        """
+        with self.driver.session() as session:
+            # 連出: (n)-[r]->(m)
+            out_q = """
+            MATCH (n)-[r]->(m)
+            WHERE elementId(n) = $eid
+            RETURN n.name AS subj, type(r) AS rel, m.name AS obj
+            """
+            # 連入: (m)-[r]->(n)
+            in_q = """
+            MATCH (m)-[r]->(n)
+            WHERE elementId(n) = $eid
+            RETURN m.name AS subj, type(r) AS rel, n.name AS obj
+            """
+            triples = []
+            for record in session.run(out_q, eid=element_id):
+                triples.append((record["subj"], record["rel"], record["obj"]))
+            for record in session.run(in_q, eid=element_id):
+                triples.append((record["subj"], record["rel"], record["obj"]))
+            return triples
+
+
     def query_subsections(self, document, section_path=None):
         def _query_subsections(self, document, section_path=None):
             logger.verbose(f"Querying subsections for document: {document}, section_path: {section_path}")
