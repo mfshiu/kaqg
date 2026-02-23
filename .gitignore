@@ -162,7 +162,9 @@ cython_debug/
 #.idea/
 
 _bak/
+_data/
 _docker/
+docker/
 _log/
 _neo4j_volumes/
 _output/

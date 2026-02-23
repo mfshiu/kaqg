@@ -2,8 +2,52 @@ import docker
 import os
 import socket
 import shutil
+import sys
 import time
 import requests
+
+# Docker 預設 socket 路徑（可被 DOCKER_HOST 覆寫）
+_DEFAULT_DOCKER_SOCK = "/var/run/docker.sock"
+# macOS Docker Desktop 常用 socket 路徑（新版本多放在此）
+_MACOS_DOCKER_SOCK = os.path.expanduser("~/.docker/run/docker.sock")
+# 候選路徑：先檢查 macOS 專用路徑，再檢查預設
+_DOCKER_SOCKET_CANDIDATES = [_MACOS_DOCKER_SOCK, _DEFAULT_DOCKER_SOCK]
+
+
+def _docker_socket_path():
+    """取得目前環境下 Docker socket 的路徑。"""
+    return os.environ.get("DOCKER_HOST", "").replace("unix://", "").strip() or _DEFAULT_DOCKER_SOCK
+
+
+def _ensure_docker_host():
+    """
+    若尚未設定 DOCKER_HOST，在 macOS 上依候選路徑尋找 Docker socket，
+    找到則設定 DOCKER_HOST，讓 docker.from_env() 使用正確位置。
+    """
+    if os.environ.get("DOCKER_HOST"):
+        return
+    if sys.platform != "darwin":
+        return
+    for path in _DOCKER_SOCKET_CANDIDATES:
+        if path and os.path.exists(path):
+            os.environ["DOCKER_HOST"] = f"unix://{path}"
+            return
+
+
+def _check_docker_available():
+    """
+    檢查 Docker daemon 是否可用（socket 是否存在）。
+    若不可用則拋出含明確說明的 Exception。
+    """
+    sock_path = _docker_socket_path()
+    if sock_path.startswith("/") and not sock_path.startswith("//"):
+        if not os.path.exists(sock_path):
+            msg = (
+                f"Docker 未運行或無法連線：找不到 socket 檔案 '{sock_path}'。"
+                " 請先啟動 Docker Desktop（或本機的 Docker daemon）後再執行。"
+            )
+            raise FileNotFoundError(msg)
+    # 若為 tcp 等其它形式則交給 docker.from_env() 處理
 
 
 class DockerManager:
@@ -22,6 +66,8 @@ class DockerManager:
         os.makedirs(self.base_volume_dir, exist_ok=True)
         print(f"base_volume_dir: {self.base_volume_dir}")
         self.hostname = hostname
+        _ensure_docker_host()
+        _check_docker_available()
         self.client = docker.from_env()
         self.image = "neo4j:community"
         # self.image = "neo4j:5.26.3-community-ubi9"

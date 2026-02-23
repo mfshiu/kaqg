@@ -3,6 +3,7 @@ docker
 neo4j
 networkx
 numpy
+openpyxl
 openai
 paho-mqtt
 pdfplumber

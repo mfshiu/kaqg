@@ -49,9 +49,14 @@ class KnowledgeGraphService(Agent):
     def on_activate(self):
         try:
             self.docker_manager = DockerManager(self.hostname, self.datapath)
+        except FileNotFoundError as e:
+            logger.error(f"Docker 未運行或無法連線: {e}")
+            raise RuntimeError(
+                "無法連線至 Docker。請先啟動 Docker Desktop（或本機 Docker daemon）後再執行。"
+            ) from e
         except Exception as e:
             logger.error(f"Failed to create DockerManager: {e}")
-            raise Exception(f"Failed to create DockerManager: {self.hostname}, {self.datapath}")
+            raise Exception(f"Failed to create DockerManager: {self.hostname}, {self.datapath}") from e
         self.all_kgs = self.docker_manager.list_KGs()
         logger.info(f"Existing KGs: {self.all_kgs}")
 
