@@ -12,6 +12,8 @@ _DEFAULT_DOCKER_SOCK = "/var/run/docker.sock"
 _MACOS_DOCKER_SOCK = os.path.expanduser("~/.docker/run/docker.sock")
 # 候選路徑：先檢查 macOS 專用路徑，再檢查預設
 _DOCKER_SOCKET_CANDIDATES = [_MACOS_DOCKER_SOCK, _DEFAULT_DOCKER_SOCK]
+# Windows Docker Desktop 使用 named pipe
+_WINDOWS_DOCKER_NPIPE = "npipe:////./pipe/docker_engine"
 
 
 def _docker_socket_path():
@@ -21,17 +23,20 @@ def _docker_socket_path():
 
 def _ensure_docker_host():
     """
-    若尚未設定 DOCKER_HOST，在 macOS 上依候選路徑尋找 Docker socket，
-    找到則設定 DOCKER_HOST，讓 docker.from_env() 使用正確位置。
+    若尚未設定 DOCKER_HOST，依平台設定預設值：
+    - Windows: npipe:////./pipe/docker_engine
+    - macOS: 依候選路徑尋找 Docker socket
     """
     if os.environ.get("DOCKER_HOST"):
         return
-    if sys.platform != "darwin":
+    if sys.platform == "win32":
+        os.environ["DOCKER_HOST"] = _WINDOWS_DOCKER_NPIPE
         return
-    for path in _DOCKER_SOCKET_CANDIDATES:
-        if path and os.path.exists(path):
-            os.environ["DOCKER_HOST"] = f"unix://{path}"
-            return
+    if sys.platform == "darwin":
+        for path in _DOCKER_SOCKET_CANDIDATES:
+            if path and os.path.exists(path):
+                os.environ["DOCKER_HOST"] = f"unix://{path}"
+                return
 
 
 def _check_docker_available():
